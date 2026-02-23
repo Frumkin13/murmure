@@ -8,7 +8,7 @@ pub fn get_current_language(app: AppHandle) -> Result<String, String> {
 
 #[command]
 pub fn set_current_language(app: AppHandle, lang: String) -> Result<(), String> {
-    const SUPPORTED_LANGUAGES: &[&str] = &["default", "en", "fr"];
+    const SUPPORTED_LANGUAGES: &[&str] = &["default", "en", "fr", "ru"];
 
     if !SUPPORTED_LANGUAGES.contains(&lang.as_str()) {
         return Err(format!("Unsupported language code: {}", lang));
