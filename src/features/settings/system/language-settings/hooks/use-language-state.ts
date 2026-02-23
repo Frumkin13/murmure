@@ -6,6 +6,7 @@ import { useTranslation, i18n } from '@/i18n';
 const SUPPORTED_LANGUAGES = [
     { code: 'en', label: 'English' },
     { code: 'fr', label: 'Français' },
+    { code: 'ru', label: 'Русский' },
 ];
 
 export const useLanguageState = () => {
