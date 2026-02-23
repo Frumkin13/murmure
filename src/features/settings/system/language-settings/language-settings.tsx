@@ -15,6 +15,7 @@ const SUPPORTED_LANGUAGES = [
     { code: 'default', label: 'Default' },
     { code: 'en', label: 'English' },
     { code: 'fr', label: 'Français' },
+    { code: 'ru', label: 'Русский' },
 ];
 
 export const LanguageSettings = () => {
