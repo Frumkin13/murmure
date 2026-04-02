@@ -9,20 +9,14 @@ interface UseShortcutOptions {
     setCommand: string;
 }
 
-export const useShortcut = ({
-    defaultShortcut,
-    getCommand,
-    setCommand,
-}: UseShortcutOptions) => {
+export const useShortcut = ({ defaultShortcut, getCommand, setCommand }: UseShortcutOptions) => {
     const [shortcut, setShortcut] = useState(defaultShortcut);
     const { t } = useTranslation();
 
     useEffect(() => {
         invoke<string>(getCommand)
             .then((val) => val?.trim() && setShortcut(val))
-            .catch((err) =>
-                console.error(`Failed to load shortcut (${getCommand}):`, err)
-            );
+            .catch((err) => console.error(`Failed to load shortcut (${getCommand}):`, err));
     }, [getCommand]);
 
     const saveShortcut = async (value: string) => {
@@ -61,7 +55,7 @@ export const SHORTCUT_CONFIGS = {
         setCommand: 'set_llm_record_shortcut',
     },
     command: {
-        defaultShortcut: 'ctrl+shift+c',
+        defaultShortcut: 'ctrl+shift+x',
         getCommand: 'get_command_shortcut',
         setCommand: 'set_command_shortcut',
     },

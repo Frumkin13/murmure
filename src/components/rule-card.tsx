@@ -1,30 +1,22 @@
 import { useState } from 'react';
-import { FormattingRule } from '../features/settings/formatting-rules/types';
+import { FormattingRule } from '../features/personalize/formatting-rules/types';
 import { Switch } from '@/components/switch';
 import { Trash2, Copy, ChevronDown, ChevronUp, Regex, GripVertical } from 'lucide-react';
 import { useTranslation } from '@/i18n';
 import { Button } from './button';
 import { RuleFormFields } from './rule-form-fields';
-import { useRegexValidation } from '@/features/settings/formatting-rules/hooks/use-regex-validation';
+import { RuleSummary } from './rule-summary';
+import { useRegexValidation } from '@/features/personalize/formatting-rules/hooks/use-regex-validation';
 
 interface RuleCardProps {
     rule: FormattingRule;
-    onUpdate: (
-        id: string,
-        updates: Partial<Omit<FormattingRule, 'id'>>
-    ) => void;
+    onUpdate: (id: string, updates: Partial<Omit<FormattingRule, 'id'>>) => void;
     onDelete: (id: string) => void;
     onDuplicate: (id: string) => void;
     dragHandleProps?: Record<string, unknown>;
 }
 
-export const RuleCard = ({
-    rule,
-    onUpdate,
-    onDelete,
-    onDuplicate,
-    dragHandleProps,
-}: RuleCardProps) => {
+export const RuleCard = ({ rule, onUpdate, onDelete, onDuplicate, dragHandleProps }: RuleCardProps) => {
     const [isExpanded, setIsExpanded] = useState(false);
     const { t } = useTranslation();
 
@@ -33,9 +25,7 @@ export const RuleCard = ({
     return (
         <div
             className={`border rounded-lg p-4 ${
-                rule.enabled
-                    ? 'border-zinc-700 bg-zinc-800/25'
-                    : 'border-zinc-800 bg-zinc-900/50 opacity-60'
+                rule.enabled ? 'border-border bg-card/25' : 'border-border bg-background/50 opacity-60'
             }`}
             data-testid={`rule-card-${rule.id}`}
         >
@@ -43,7 +33,7 @@ export const RuleCard = ({
                 <div className="flex items-center gap-3 flex-1 min-w-0">
                     <button
                         type="button"
-                        className="cursor-grab text-zinc-600 hover:text-zinc-400 transition-colors active:cursor-grabbing p-2 -m-2"
+                        className="cursor-grab text-muted-foreground hover:text-muted-foreground transition-colors active:cursor-grabbing p-2 -m-2"
                         title={t('Reorder')}
                         {...dragHandleProps}
                     >
@@ -51,32 +41,17 @@ export const RuleCard = ({
                     </button>
                     <Switch
                         checked={rule.enabled}
-                        onCheckedChange={(checked) =>
-                            onUpdate(rule.id, { enabled: checked })
-                        }
+                        onCheckedChange={(checked) => onUpdate(rule.id, { enabled: checked })}
                         data-testid={`rule-toggle-${rule.id}`}
                     />
-                    {rule.match_mode === 'regex' && (
-                        <Regex className="w-3.5 h-3.5 text-zinc-500 shrink-0" />
-                    )}
-                    <span className="text-sm font-medium text-white truncate">
-                        {rule.trigger || t('(empty trigger)')}
-                    </span>
-                    <span className="text-zinc-500">→</span>
-                    <span className="text-sm text-zinc-400 truncate">
-                        {rule.replacement.length > 20
-                            ? `${rule.replacement
-                                  .replaceAll('\n', '↵')
-                                  .substring(0, 20)}...`
-                            : rule.replacement.replaceAll('\n', '↵') ||
-                              t('(delete)')}
-                    </span>
+                    {rule.match_mode === 'regex' && <Regex className="w-3.5 h-3.5 text-muted-foreground shrink-0" />}
+                    <RuleSummary trigger={rule.trigger} replacement={rule.replacement} />
                 </div>
                 <div className="flex items-center gap-1">
                     <Button
                         variant="ghost"
                         onClick={() => onDuplicate(rule.id)}
-                        className="p-2 text-zinc-500 hover:text-zinc-300 hover:bg-zinc-700 rounded-md transition-colors"
+                        className="p-2 text-muted-foreground hover:text-foreground hover:bg-accent rounded-md transition-colors"
                         title={t('Duplicate')}
                         data-testid={`rule-duplicate-${rule.id}`}
                     >
@@ -85,7 +60,7 @@ export const RuleCard = ({
                     <Button
                         variant="ghost"
                         onClick={() => onDelete(rule.id)}
-                        className="p-2 text-zinc-500 hover:text-red-400 hover:bg-zinc-700 rounded-md transition-colors"
+                        className="p-2 text-muted-foreground hover:text-red-400 hover:bg-accent rounded-md transition-colors"
                         title={t('Delete')}
                         data-testid={`rule-delete-${rule.id}`}
                     >
@@ -97,9 +72,9 @@ export const RuleCard = ({
                         onClick={() => setIsExpanded(!isExpanded)}
                     >
                         {isExpanded ? (
-                            <ChevronUp className="w-4 h-4 text-zinc-500 flex-shrink-0" />
+                            <ChevronUp className="w-4 h-4 text-muted-foreground flex-shrink-0" />
                         ) : (
-                            <ChevronDown className="w-4 h-4 text-zinc-500 flex-shrink-0" />
+                            <ChevronDown className="w-4 h-4 text-muted-foreground flex-shrink-0" />
                         )}
                     </Button>
                 </div>
@@ -111,15 +86,9 @@ export const RuleCard = ({
                         trigger={rule.trigger}
                         replacement={rule.replacement}
                         matchMode={rule.match_mode}
-                        onTriggerChange={(value) =>
-                            onUpdate(rule.id, { trigger: value })
-                        }
-                        onReplacementChange={(value) =>
-                            onUpdate(rule.id, { replacement: value })
-                        }
-                        onMatchModeChange={(mode) =>
-                            onUpdate(rule.id, { match_mode: mode })
-                        }
+                        onTriggerChange={(value) => onUpdate(rule.id, { trigger: value })}
+                        onReplacementChange={(value) => onUpdate(rule.id, { replacement: value })}
+                        onMatchModeChange={(mode) => onUpdate(rule.id, { match_mode: mode })}
                         regexError={regexError}
                         testIdPrefix={`rule-${rule.id}`}
                     />

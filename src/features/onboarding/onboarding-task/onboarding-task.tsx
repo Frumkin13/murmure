@@ -9,20 +9,10 @@ interface OnboardingTaskProps {
     onToggle?: () => void;
 }
 
-export const OnboardingTask = ({
-    done,
-    label,
-    description,
-    onToggle,
-}: OnboardingTaskProps) => {
+export const OnboardingTask = ({ done, label, description, onToggle }: OnboardingTaskProps) => {
     return (
         <li className="flex items-center gap-4 py-1">
-            <span
-                className={
-                    'transition-transform duration-200 ' +
-                    (done ? 'scale-100' : 'scale-75 opacity-50')
-                }
-            >
+            <span className={'transition-transform duration-200 ' + (done ? 'scale-100' : 'scale-75 opacity-50')}>
                 <Checkbox
                     checked={done}
                     onCheckedChange={onToggle}
@@ -35,12 +25,10 @@ export const OnboardingTask = ({
                     )}
                 />
             </span>
-            <span
-                className={done ? 'text-zinc-300 line-through opacity-30!' : ''}
-            >
+            <span className={done ? 'text-foreground line-through opacity-30!' : ''}>
                 {label}
                 {description && (
-                    <Typography.Paragraph className="text-zinc-400 text-xs italic">
+                    <Typography.Paragraph className="text-muted-foreground text-xs italic">
                         {description}
                     </Typography.Paragraph>
                 )}

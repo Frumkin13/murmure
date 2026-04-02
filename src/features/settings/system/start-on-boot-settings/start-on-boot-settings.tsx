@@ -13,13 +13,11 @@ export const StartOnBootSettings = () => {
         <SettingsUI.Item>
             <SettingsUI.Description>
                 <Typography.Title className="flex items-center gap-2">
-                    <Power className="w-4 h-4 text-zinc-400" />
+                    <Power className="w-4 h-4 text-muted-foreground" />
                     {t('Start on boot')}
                 </Typography.Title>
                 <Typography.Paragraph>
-                    {t(
-                        'If enabled, Murmure will start automatically when your system starts.'
-                    )}
+                    {t('If enabled, Murmure will start automatically when your system starts.')}
                 </Typography.Paragraph>
             </SettingsUI.Description>
             <Switch checked={startOnBoot} onCheckedChange={setStartOnBoot} />

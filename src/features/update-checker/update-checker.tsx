@@ -16,9 +16,7 @@ export const UpdateChecker = ({ className = '' }: UpdateCheckerProps) => {
     const [showUpToDate, setShowUpToDate] = useState(false);
     const { t } = useTranslation();
 
-    const upToDateTimeoutRef = useRef<
-        ReturnType<typeof setTimeout> | undefined
-    >(undefined);
+    const upToDateTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
     const isManualCheckRef = useRef(false);
     const downloadedBytesRef = useRef(0);
     const contentLengthRef = useRef(0);
@@ -26,8 +24,7 @@ export const UpdateChecker = ({ className = '' }: UpdateCheckerProps) => {
     useEffect(() => {
         checkForUpdates();
         return () => {
-            if (upToDateTimeoutRef.current)
-                clearTimeout(upToDateTimeoutRef.current);
+            if (upToDateTimeoutRef.current) clearTimeout(upToDateTimeoutRef.current);
         };
     }, []);
 
@@ -43,12 +40,8 @@ export const UpdateChecker = ({ className = '' }: UpdateCheckerProps) => {
                 setUpdateAvailable(false);
                 if (isManualCheckRef.current) {
                     setShowUpToDate(true);
-                    if (upToDateTimeoutRef.current)
-                        clearTimeout(upToDateTimeoutRef.current);
-                    upToDateTimeoutRef.current = setTimeout(
-                        () => setShowUpToDate(false),
-                        3000
-                    );
+                    if (upToDateTimeoutRef.current) clearTimeout(upToDateTimeoutRef.current);
+                    upToDateTimeoutRef.current = setTimeout(() => setShowUpToDate(false), 3000);
                 }
             }
         } catch (e) {
@@ -76,18 +69,12 @@ export const UpdateChecker = ({ className = '' }: UpdateCheckerProps) => {
                 switch (event.event) {
                     case 'Started':
                         downloadedBytesRef.current = 0;
-                        contentLengthRef.current =
-                            event.data.contentLength ?? 0;
+                        contentLengthRef.current = event.data.contentLength ?? 0;
                         break;
                     case 'Progress': {
                         downloadedBytesRef.current += event.data.chunkLength;
                         const total = contentLengthRef.current;
-                        const progress =
-                            total > 0
-                                ? Math.round(
-                                      (downloadedBytesRef.current / total) * 100
-                                  )
-                                : 0;
+                        const progress = total > 0 ? Math.round((downloadedBytesRef.current / total) * 100) : 0;
                         setDownloadProgress(Math.min(progress, 100));
                         break;
                     }
@@ -127,13 +114,11 @@ export const UpdateChecker = ({ className = '' }: UpdateCheckerProps) => {
 
     const onClick = () => {
         if (updateAvailable && !isInstalling) return installUpdate();
-        if (!isChecking && !isInstalling && !updateAvailable)
-            return handleManualUpdateCheck();
+        if (!isChecking && !isInstalling && !updateAvailable) return handleManualUpdateCheck();
     };
 
     const isDisabled = isChecking || isInstalling;
-    const isClickable =
-        !isDisabled && (updateAvailable || (!isChecking && !showUpToDate));
+    const isClickable = !isDisabled && (updateAvailable || (!isChecking && !showUpToDate));
 
     return (
         <button
@@ -142,14 +127,10 @@ export const UpdateChecker = ({ className = '' }: UpdateCheckerProps) => {
             className={`text-xs transition-colors flex items-center gap-1.5 px-2 py-1 rounded cursor-pointer disabled:opacity-50 ${
                 updateAvailable && !isInstalling
                     ? 'text-sky-500 hover:text-sky-400 hover:bg-sky-500/10'
-                    : 'text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-accent'
             } ${className}`}
         >
-            {updateAvailable && !isInstalling ? (
-                <Download className="w-4 h-4" />
-            ) : (
-                <RefreshCcw className="w-4 h-4" />
-            )}
+            {updateAvailable && !isInstalling ? <Download className="w-4 h-4" /> : <RefreshCcw className="w-4 h-4" />}
             <span>{getUpdateStatusText()}</span>
         </button>
     );

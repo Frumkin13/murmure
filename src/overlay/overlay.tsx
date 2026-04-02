@@ -2,7 +2,7 @@ import { listen } from '@tauri-apps/api/event';
 import { useEffect, useRef, useState } from 'react';
 import { AudioVisualizer } from '@/features/home/audio-visualizer/audio-visualizer';
 import { useLevelState } from '@/features/home/audio-visualizer/hooks/use-level-state';
-import type { LLMConnectSettings } from '@/features/llm-connect/hooks/use-llm-connect';
+import type { LLMConnectSettings } from '@/features/personalize/llm-connect/hooks/use-llm-connect';
 import clsx from 'clsx';
 
 type RecordingMode = 'standard' | 'llm' | 'command';
@@ -10,8 +10,7 @@ type RecordingMode = 'standard' | 'llm' | 'command';
 export const Overlay = () => {
     const [feedback, setFeedback] = useState<string | null>(null);
     const [isError, setIsError] = useState(false);
-    const [recordingMode, setRecordingMode] =
-        useState<RecordingMode>('standard');
+    const [recordingMode, setRecordingMode] = useState<RecordingMode>('standard');
     const { level } = useLevelState();
     const [hasAudio, setHasAudio] = useState(false);
     const audioTimerRef = useRef<number | null>(null);
@@ -36,19 +35,19 @@ export const Overlay = () => {
             setFeedback(event.payload);
             setIsError(false);
         });
-        const unlistenSettingsPromise = listen<LLMConnectSettings>(
-            'llm-settings-updated',
-            (event) => {
-                const activeMode =
-                    event.payload.modes[event.payload.active_mode_index];
-                if (activeMode?.name) {
-                    setFeedback(activeMode.name);
-                    setIsError(false);
-                }
+        const unlistenSettingsPromise = listen<LLMConnectSettings>('llm-settings-updated', (event) => {
+            const activeMode = event.payload.modes[event.payload.active_mode_index];
+            if (activeMode?.name) {
+                setFeedback(activeMode.name);
+                setIsError(false);
             }
-        );
+        });
         const unlistenErrorPromise = listen<string>('llm-error', (event) => {
             setFeedback(event.payload);
+            setIsError(true);
+        });
+        const unlistenRecordingErrorPromise = listen<string>('recording-error', () => {
+            setFeedback('Mic error');
             setIsError(true);
         });
         const unlistenModePromise = listen<string>('overlay-mode', (event) => {
@@ -69,6 +68,7 @@ export const Overlay = () => {
             unlistenPromise.then((unlisten) => unlisten());
             unlistenSettingsPromise.then((unlisten) => unlisten());
             unlistenErrorPromise.then((unlisten) => unlisten());
+            unlistenRecordingErrorPromise.then((unlisten) => unlisten());
             unlistenModePromise.then((unlisten) => unlisten());
             unlistenShowPromise.then((unlisten) => unlisten());
         };
@@ -129,15 +129,7 @@ export const Overlay = () => {
                     {feedback}
                 </span>
             ) : (
-                <div
-                    className={clsx(
-                        'origin-center',
-                        'h-[20px]',
-                        'mt-1',
-                        'p-1.5',
-                        'overflow-hidden'
-                    )}
-                >
+                <div className={clsx('origin-center', 'h-[20px]', 'mt-1', 'p-1.5', 'overflow-hidden')}>
                     {hasAudio ? (
                         <AudioVisualizer
                             className="-mt-3"

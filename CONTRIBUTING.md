@@ -9,6 +9,7 @@ If you'd like to improve Murmure or just build the sources, you're in the right 
 For specific coding conventions (naming, file structure, error handling...), please consult the [**GUIDELINES.md**](GUIDELINES.md) file.
 
 Our guiding principles:
+
 - **Privacy first** : Never store user data, except for the last five transcriptions.
 - **Security** : No compromises, no open CORS, no unsafe shortcuts, no exceptions.
 - **Clean Code** : Code must be easy to read and maintain. Follow SRP and SOLID principles, and avoid duplication.
@@ -28,7 +29,7 @@ Our guiding principles:
 
 - Download the Parakeet ONNX model [here](https://github.com/Kieirra/murmure-model/releases/download/1.0.0/parakeet-tdt-0.6b-v3-int8.zip)
 - Place the extracted folder into `resources/parakeet-tdt-0.6b-v3-int8`
-- Install all required dependencies for Tauri: [https://v2.tauri.app/fr/start/prerequisites/](https://v2.tauri.app/fr/start/prerequisites/)
+- Install all required dependencies for Tauri: [https://v2.tauri.app/start/prerequisites/](https://v2.tauri.app/start/prerequisites/)
 
 ### Start Murmure
 
@@ -148,4 +149,3 @@ Notes:
 - `shortcuts/` : Global keyboard shortcuts (push-to-talk, last transcript, suspend), with per-OS backends
 - `http_api/` : Local HTTP API: server lifecycle, routes, and shared state
 - `engine/` : CPU transcription engine and Parakeet runtime bindings (adapted from open source)
-

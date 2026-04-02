@@ -13,19 +13,14 @@ export const HistorySettings = () => {
         <SettingsUI.Item>
             <SettingsUI.Description>
                 <Typography.Title className="flex items-center gap-2">
-                    <Shield className="w-4 h-4 text-zinc-400" />
+                    <Shield className="w-4 h-4 text-muted-foreground" />
                     {t('History persistence')}
                 </Typography.Title>
                 <Typography.Paragraph>
-                    {t(
-                        'Store the last five transcriptions on disk. Disable to keep history in memory only.'
-                    )}
+                    {t('Store the last five transcriptions on disk. Disable to keep history in memory only.')}
                 </Typography.Paragraph>
             </SettingsUI.Description>
-            <Switch
-                checked={persistHistory}
-                onCheckedChange={setPersistHistory}
-            />
+            <Switch checked={persistHistory} onCheckedChange={setPersistHistory} />
         </SettingsUI.Item>
     );
 };

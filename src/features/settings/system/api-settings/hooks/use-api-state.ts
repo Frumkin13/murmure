@@ -1,9 +1,12 @@
 import { invoke } from '@tauri-apps/api/core';
 import { useState, useEffect } from 'react';
+import { toast } from 'react-toastify';
+import { useTranslation } from '@/i18n';
 
 export const useApiState = () => {
     const [apiEnabled, setApiEnabled] = useState<boolean>(false);
     const [apiPort, setApiPort] = useState<number>(4800);
+    const { t } = useTranslation();
 
     const loadApiState = async () => {
         try {
@@ -31,6 +34,7 @@ export const useApiState = () => {
                     await invoke('start_http_api_server');
                 } catch (error) {
                     console.error('Failed to start HTTP API server:', error);
+                    toast.error(t('Failed to start API server'));
                     // Revert the state on error
                     setApiEnabled(false);
                 }
@@ -40,10 +44,12 @@ export const useApiState = () => {
                     await invoke('stop_http_api_server');
                 } catch (error) {
                     console.error('Failed to stop HTTP API server:', error);
+                    toast.error(t('Failed to stop API server'));
                 }
             }
         } catch (error) {
             console.error('Failed to set API enabled:', error);
+            toast.error(t('Failed to toggle API'));
             // Revert the state on error
             setApiEnabled(!enabled);
         }
@@ -58,19 +64,16 @@ export const useApiState = () => {
                 if (apiEnabled) {
                     try {
                         await invoke('stop_http_api_server');
-                        await new Promise((resolve) =>
-                            setTimeout(resolve, 100)
-                        );
+                        await new Promise((resolve) => setTimeout(resolve, 100));
                         await invoke('start_http_api_server');
                     } catch (error) {
-                        console.error(
-                            'Failed to restart HTTP API server with new port:',
-                            error
-                        );
+                        console.error('Failed to restart HTTP API server with new port:', error);
+                        toast.error(t('Failed to restart API server'));
                     }
                 }
             } catch (error) {
                 console.error('Failed to set API port:', error);
+                toast.error(t('Failed to save API port'));
             }
         }
     };

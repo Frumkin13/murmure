@@ -3,28 +3,23 @@ import { SidebarProvider, SidebarInset } from '../../components/sidebar';
 import { AppSidebar } from './app-sidebar/app-sidebar';
 import clsx from 'clsx';
 import { Bounce, ToastContainer } from 'react-toastify';
-import { AccessibilityListener } from './accessibility-listener';
+import { AccessibilityListener } from './listeners/accessibility-listener';
+import { RecordingErrorListener } from './listeners/recording-error-listener';
+import { LlmErrorListener } from './listeners/llm-error-listener';
+import { ConfigImportedListener } from './listeners/config-imported-listener';
 
 export const Layout = () => {
     return (
-        <SidebarProvider defaultOpen={true} className="bg-zinc-900 dark">
+        <SidebarProvider open={true} onOpenChange={() => {}} className="bg-background dark">
             <AccessibilityListener />
+            <RecordingErrorListener />
+            <LlmErrorListener />
+            <ConfigImportedListener />
             <AppSidebar />
             <SidebarInset
-                className={clsx(
-                    'bg-zinc-900',
-                    'text-white',
-                    'pr-8',
-                    'pt-8',
-                    'flex',
-                    'items-center',
-                    'pl-[16rem]'
-                )}
+                className={clsx('bg-background', 'text-white', 'pr-8', 'pt-8', 'flex', 'items-center', 'pl-[16rem]')}
             >
-                <div
-                    className="max-w-[800px] w-full"
-                    data-testid="murmure-content"
-                >
+                <div className="max-w-[800px] w-full pb-12" data-testid="murmure-content">
                     <Outlet />
                 </div>
             </SidebarInset>

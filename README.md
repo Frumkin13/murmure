@@ -1,4 +1,4 @@
- # Murmure
+# Murmure
 
 A privacy-first, open-source speech-to-text application that runs entirely on your machine, powered by a neural network via NVIDIA’s [Parakeet TDT 0.6B v3 model](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3) for fast, local transcription. Murmure turns your voice into text with no internet connection and zero data collection, and supports 25 European languages.
 
@@ -11,10 +11,11 @@ Learn more on the [official website](https://murmure.al1x-ai.com/).
 - [Features](#features)
 - [Usage](#usage)
 - [Installation](#installation)
-  - [Windows (Official)](#windows-official)
-  - [Linux (Official)](#linux-official)
-  - [MacOS (Official)](#macos-official)
-  - [MacOS - Intel (Official)](#macos---intel-official)
+    - [Windows (Official)](#windows-official)
+    - [Linux (Official)](#linux-official)
+    - [MacOS (Official)](#macos-official)
+    - [MacOS - Intel (Official)](#macos---intel-official)
+- [CLI Import (1.8.0)](#cli-import-180)
 - [Changelog](#changelog)
 - [🗺️ Roadmap](#️-roadmap)
 - [Contributing](#contributing)
@@ -49,10 +50,11 @@ Typical use cases include:
 - Capturing creative ideas or dictation
 - Post processing with a local LLM to translate, fix grammar, etc.
 
+Because all computation is local, no network connection is required.
+
 ## Installation
 
 ### Windows (Official)
-
 
 Multiple installation methods are available:
 
@@ -62,7 +64,7 @@ Multiple installation methods are available:
 
 - Via WinGet:
     1. Open the `Console` app via the Windows start menu.
-    2. Inside the console, paste `winget install Kieirra.Murmure` and follow the instructions. If you don't have administrator rights, you can still try `winget install Kieirra.Murmure --scope user`
+    2. Inside the console, paste `winget install Kieirra.Murmure` and follow the instructions. (`--scope user` will be available in the future)
 
 > [!IMPORTANT]
 > Murmure requires the [Microsoft Visual C++ Redistributable](https://learn.microsoft.com/cpp/windows/latest-supported-vc-redist) to work on Windows. This package is present on most computers, but if you encounter the error message `The code execution cannot proceed because MSVCP140.dll was not found. Reinstalling the program may fix this problem.`, download and install the package from the official page or use this direct download link: [https://aka.ms/vc14/vc_redist.x64.exe](https://aka.ms/vc14/vc_redist.x64.exe)
@@ -71,24 +73,36 @@ Multiple installation methods are available:
 
 ### Linux (Official)
 
-1. Download Murmure_amd64.AppImage from [release](https://github.com/Kieirra/murmure/releases) page
-2. Make it executable: `chmod +x Murmure_amd64.AppImage`
-3. Run the AppImage.
+Multiple installation methods are available:
+- Quick install via terminal (Debian-based distributions):
+    ```sh
+    curl -fsSL https://raw.githubusercontent.com/Kieirra/murmure/main/install.sh | sh
+    ```
+
+- Using a `.deb` file (Debian-based distributions):
+    1. Go to the [release](https://github.com/Kieirra/murmure/releases) page and download the latest `Murmure_amd64.deb`.
+    2. Install it: `sudo dpkg -i Murmure_amd64.deb`
+
+- Using an AppImage:
+    1. Download `Murmure_amd64.AppImage` from the [release](https://github.com/Kieirra/murmure/releases) page.
+    2. Make it executable: `chmod +x Murmure_amd64.AppImage`
+    3. Run the AppImage.
 
 > [!IMPORTANT]
 > Murmure currently has limited support on Wayland-based distributions (except Fedora, which can fall back to X11 for some apps).  
-This appears to be related to Wayland’s sandbox restrictions for AppImages, the global shortcut to start recording will not work in this environment.  
-No workaround is available yet. See #28
+> This appears to be related to Wayland’s sandbox restrictions for AppImages, the global shortcut to start recording will not work in this environment.  
+> No workaround is available yet. See #28
 
 ### MacOS (Official)
 
-1. Download Murmure_aarch64_darwin.dmg from the [release](https://github.com/Kieirra/murmure/releases) page
+1. Download **Murmure_aarch64_darwin.dmg** from the [release](https://github.com/Kieirra/murmure/releases) page
 2. Drag Murmure to the Applications folder, then open it from there.
 3. Murmure should ask for permissions to access your microphone and accessibility.
 4. Restart Murmure for the permissions to take effect.
 
 > [!IMPORTANT]
 > **Updating Murmure on macOS from 1.6.0:** If you experience issues with Murmure and the shortcuts are not working, please do this exactly in this order, (and "Remove" means not only un-toggling but really removing completely Murmure from the list) :
+
 1. Remove Murmure from System Settings → Privacy & Security → Accessibility.
 2. Remove Murmure from System Settings → Privacy & Security → Input monitoring.
 3. Install the last version
@@ -101,13 +115,14 @@ it should work. It's a bit painful but you will not do it again with the next ve
 
 ### MacOS - Intel (Official)
 
-1. Download Murmure_aarch64_darwin.dmg from the [release](https://github.com/Kieirra/murmure/releases) page
+1. Download **Murmure_x86_64_darwin.dmg** from the [release](https://github.com/Kieirra/murmure/releases) page
 2. Drag Murmure to the Applications folder, then open it from there.
 3. Murmure should ask for permissions to access your microphone and accessibility.
 4. Restart Murmure for the permissions to take effect.
 
 > [!IMPORTANT]
 > **Updating Murmure on macOS from 1.6.0:** If you experience issues with Murmure and the shortcuts are not working, please do this exactly in this order, (and "Remove" means not only un-toggling but really removing completely Murmure from the list) :
+
 1. Remove Murmure from System Settings → Privacy & Security → Accessibility.
 2. Remove Murmure from System Settings → Privacy & Security → Input monitoring.
 3. Install the last version
@@ -118,46 +133,58 @@ it should work. It's a bit painful but you will not do it again with the next ve
 
 it should work. It's a bit painful but you will not do it again with the next version, it's because 1.6.0 have the same name but is not detected as the same application... so macos is lost.
 
-Because all computation is local, no network connection is required.
+## CLI Import (1.8.0)
+
+> [!NOTE]
+> This feature is available starting from version **1.8.0**.
+
+Murmure supports importing a `.murmure` configuration file via the command line, useful for sysadmin mass deployment or sharing settings across machines.
+
+**Linux:**
+```sh
+murmure import config.murmure
+```
+
+**macOS:**
+```sh
+/Applications/murmure.app/Contents/MacOS/murmure import config.murmure
+```
+
+**Windows:**
+```powershell
+murmure.exe import config.murmure
+```
+
+You can also specify an import strategy (`replace` by default, or `merge` to keep existing settings and add new ones):
+
+```sh
+murmure import config.murmure --strategy merge
+```
+
+For more details, run `murmure import --help`.
 
 ## Changelog
 
 See [CHANGELOG.md](./CHANGELOG.md).
 
 ## 🗺️ Roadmap
-- [x] (1.8.0) feat(shortcuts): Add support for mouse buttons (https://github.com/Kieirra/murmure/pull/158)
-- [x] (1.8.0) feat(dictionary): Add an option to clear all dictionary entries (https://github.com/Kieirra/murmure/pull/159)
-- [x] (1.8.0) feat(shortcuts): Add a shortcut in overlay to cancel recording https://github.com/Kieirra/murmure/pull/161
-- [x] (1.8.0) feat(rules): Add regex support for custom rules https://github.com/Kieirra/murmure/pull/163 https://github.com/Kieirra/murmure/issues/105
-- [x] (1.8.0) feat(rules): Improve rules label to make sentences https://github.com/Kieirra/murmure/pull/163 https://github.com/Kieirra/murmure/issues/101
-- [x] (1.8.0) feat(rules): Add a “?” helper in the “Replacement text” field (explain natural language input and real line breaks instead of `\n`) https://github.com/Kieirra/murmure/pull/163
-- [x] (1.8.0) feat(rules): Short text correction — auto-lowercase and remove trailing punctuation for short transcriptions (1-2 words)
-- [x] (1.8.0) feat(rules): Allow rule reordering https://github.com/Kieirra/murmure/pull/170
-- [x] (1.8.0) fix(overlay): remove scrollbar on some configurations on windows https://github.com/Kieirra/murmure/pull/169 
-- [x] (1.8.0) feat(ci): Add a `.deb` package and `install.sh` one-liner script for Debian/Ubuntu/Linux Mint
-- [x] (1.8.0) feat(update): Update `tauri-plugin-updater` to 2.10.0 for multi-format support (.deb, .exe, macOS Intel)
-- [x] (1.8.0) fix(update): Fix double percentage display during download
-- [x] (1.8.0) feat(sidebar): Add "Release notes" link in sidebar footer
-- [ ] (1.8.0) feat(overlay): Configure overlay size
-- [ ] (1.8.0) feat(rules): Add auto-send enter (https://github.com/Kieirra/murmure/pull/156)
-- [ ] (1.8.0) feat(llm): Allow llm mode reordering https://github.com/Kieirra/murmure/issues/104
-- [ ] (1.8.0) feat(llm): Allow bypassing onboarding for people which have a remote ollama server
-- [ ] (1.8.0) feat(about): Improve UI (years, parakeet model name twice, etc.)
-- [ ] (1.8.0) feat(shortcuts): using delete should remove shortcuts
-- [ ] (1.8.0) fix(shortcuts): Do not allow adding duplicate shortcuts
-- [ ] (1.8.0) feat(dictionary): Virtualize dictionary to handle large dictionaries
-- [ ] (1.8.0) feat: Allow pinning Murmure to the dock on linux https://github.com/Kieirra/murmure/issues/64
-- [ ] (1.8.0) (under consideration) refactor(ui): Update design
+
+- [x] (1.8.1) fix(sidebar): Remove Ctrl+B shortcut that could hide sidebar https://github.com/Kieirra/murmure/issues/266
+- [ ] (1.8.1) fix(shortcuts): Ctrl+Space & other shortcuts not working on macOS https://github.com/Kieirra/murmure/issues/274
+- [x] (1.8.1) fix(audio): Virtual microphones not listed (e.g. Nvidia Broadcast) https://github.com/Kieirra/murmure/issues/164
+- [x] (1.8.1) fix(voice-mode): Add beta tag and CPU usage warning
+- [x] (1.8.1) chore(deps): Security updates for dependencies
+- [ ] feat(shortcuts): using delete should remove shortcuts
+- [ ] fix(shortcuts): Do not allow adding duplicate shortcuts
+- [ ] feat(dictionary): Virtualize dictionary to handle large dictionaries
 - [ ] feat(llm): Automatically detect Ollama at first LLM Connect tutorial.
+- [ ] feat(overlay): Configure overlay size
 - [ ] feat(overlay): Allow dragging the overlay to change its position https://github.com/Kieirra/murmure/issues/64
 - [ ] feat(dictionary): Improve detection https://github.com/Kieirra/murmure/issues/44
 - [ ] fix(visualizer): Adjust sensitivity (dynamic or lower)
 - [ ] fix(visualizer): Visualizer does not always reset at the end of a transcription
 - [ ] refactor(settings): Secure settings persistence (migrate to tauri-plugin-store for atomic writes)
 - [ ] feat(shortcuts): Add a shortcut to automatically add a selected word to the dictionary (copy selection → read word → add to dictionary)
-- [ ] fix(shortcuts): Improve shortcut support on Linux and Windows
-- [ ] fix(overlay): Overlay may freeze under certain conditions (not reproducible yet)
-- [ ] fix(overlay): Prevent launching multiple Murmure instances when clicking rapidly (not reproducible yet)
 - [ ] (under consideration) feat(advanced): Audio pre-prompt https://github.com/Kieirra/murmure/issues/75
 - [ ] (under consideration) feat(webhook): Send an HTTP request after `CTRL + SPACE` (opens up many interesting possibilities)
 

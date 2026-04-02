@@ -1,10 +1,11 @@
 use crate::audio::helpers::create_wav_writer;
 use crate::audio::sound;
+use crate::audio::types::RecordingTrigger;
 use anyhow::{Context, Error, Result};
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::Device;
 use hound::WavWriter;
-use log::{debug, error};
+use log::{debug, error, info, trace};
 use parking_lot::Mutex;
 use std::fs::File;
 use std::io::BufWriter;
@@ -14,6 +15,8 @@ use std::sync::Arc;
 use tauri::{AppHandle, Emitter, Manager};
 
 const MAX_RECORDING_DURATION_SECS: u64 = 300; // 5 min
+const SILENCE_AUTO_STOP_THRESHOLD: f32 = 0.03;
+const SILENCE_AUTO_STOP_SPEECH_THRESHOLD: f32 = 0.03;
 
 type WavWriterType = WavWriter<BufWriter<File>>;
 type SharedWriter = Arc<Mutex<Option<WavWriterType>>>;
@@ -28,6 +31,7 @@ pub struct AudioRecorder {
     stream: SendStream,
     app_handle: AppHandle,
     start_time: Option<std::time::Instant>,
+    previous_default_source: Option<String>,
 }
 
 impl AudioRecorder {
@@ -35,53 +39,69 @@ impl AudioRecorder {
         // Reset the limit flag at the start of each recording
         limit_reached.store(false, Ordering::SeqCst);
 
-        let device = Self::get_device(app.clone())?;
-        let config = device
-            .default_input_config()
-            .context("No input config available")?;
+        let audio_state = app.state::<crate::audio::types::AudioState>();
+        let recording_trigger = audio_state.get_recording_trigger();
 
-        let writer = create_wav_writer(file_path, &config)?;
+        let (device, previous_default_source) = Self::get_device(app.clone())?;
+        let config = match device
+            .default_input_config()
+            .context("No input config available")
+        {
+            Ok(config) => config,
+            Err(error) => {
+                crate::audio::microphone::restore_default_source_after_recording(
+                    previous_default_source,
+                );
+                return Err(error);
+            }
+        };
+
+        let writer = match create_wav_writer(file_path, &config) {
+            Ok(writer) => writer,
+            Err(error) => {
+                crate::audio::microphone::restore_default_source_after_recording(
+                    previous_default_source,
+                );
+                return Err(error);
+            }
+        };
         let writer_arc = Arc::new(Mutex::new(Some(writer)));
 
-        let stream = build_stream(
+        let stream = match build_stream(
             &device,
             &config,
             writer_arc.clone(),
             app.clone(),
             limit_reached,
-        )?;
+            recording_trigger,
+        ) {
+            Ok(stream) => stream,
+            Err(error) => {
+                crate::audio::microphone::restore_default_source_after_recording(
+                    previous_default_source,
+                );
+                return Err(error);
+            }
+        };
 
         Ok(Self {
             writer: writer_arc,
             stream: SendStream(Some(stream)),
             app_handle: app,
             start_time: None,
+            previous_default_source,
         })
     }
 
-    /// Retrieves the audio input device based on the cached device or default.
-    ///
-    /// If a device has been cached (user selected a specific mic), it uses that device.
-    /// Otherwise, it falls back to the default input device.
-    /// This avoids enumerating all audio devices on each recording, which is slow on Linux.
-    ///
-    /// # Arguments
-    /// * `app` - The Tauri application handle.
-    ///
-    /// # Returns
-    /// * `Result<Device, Error>` - The audio input device or an error if none is available.
-    fn get_device(app: AppHandle) -> Result<Device, Error> {
-        let audio_state = app.state::<crate::audio::types::AudioState>();
+    fn get_device(app: AppHandle) -> Result<(Device, Option<String>), Error> {
+        let settings = crate::settings::load_settings(&app);
 
-        // Check if we have a cached device (user selected a specific mic)
-        if let Some(device) = audio_state.get_cached_device() {
-            if let Ok(desc) = device.description() {
-                debug!("Selected microphone: {} (cached)", desc.name());
-            }
-            return Ok(device);
+        if let Some(ref mic_id) = settings.mic_id {
+            debug!("Resolving manually selected microphone: {}", mic_id);
+            return crate::audio::microphone::resolve_device_for_recording(mic_id);
         }
 
-        // No cached device - use system default
+        // Automatic mode: use system default
         let host = cpal::default_host();
         let default_device = host
             .default_input_device()
@@ -89,7 +109,7 @@ impl AudioRecorder {
         if let Ok(desc) = default_device.description() {
             debug!("Selected microphone: default ({})", desc.name());
         }
-        Ok(default_device)
+        Ok((default_device, None))
     }
 
     pub fn start(&mut self) -> Result<()> {
@@ -110,15 +130,31 @@ impl AudioRecorder {
         self.start_time = None;
 
         // Finalize writer
+        let mut result = Ok(());
         let mut writer_guard = self.writer.lock();
         if let Some(writer) = writer_guard.take() {
-            writer.finalize().context("Failed to finalize WAV file")?;
-            let settings = crate::settings::load_settings(&self.app_handle);
-            if settings.sound_enabled {
-                sound::play_sound(&self.app_handle, sound::Sound::StopRecording);
+            result = writer.finalize().context("Failed to finalize WAV file");
+            if result.is_ok() {
+                let settings = crate::settings::load_settings(&self.app_handle);
+                if settings.sound_enabled {
+                    sound::play_sound(&self.app_handle, sound::Sound::StopRecording);
+                }
             }
         }
-        Ok(())
+
+        crate::audio::microphone::restore_default_source_after_recording(
+            self.previous_default_source.take(),
+        );
+
+        result
+    }
+}
+
+impl Drop for AudioRecorder {
+    fn drop(&mut self) {
+        crate::audio::microphone::restore_default_source_after_recording(
+            self.previous_default_source.take(),
+        );
     }
 }
 
@@ -128,17 +164,33 @@ fn build_stream(
     writer: SharedWriter,
     app: AppHandle,
     limit_reached: Arc<AtomicBool>,
+    recording_trigger: RecordingTrigger,
 ) -> Result<cpal::Stream> {
     match config.sample_format() {
-        cpal::SampleFormat::F32 => {
-            build_stream_impl::<f32>(device, config, writer, app, limit_reached.clone())
-        }
-        cpal::SampleFormat::I16 => {
-            build_stream_impl::<i16>(device, config, writer, app, limit_reached.clone())
-        }
-        cpal::SampleFormat::I32 => {
-            build_stream_impl::<i32>(device, config, writer, app, limit_reached.clone())
-        }
+        cpal::SampleFormat::F32 => build_stream_impl::<f32>(
+            device,
+            config,
+            writer,
+            app,
+            limit_reached.clone(),
+            recording_trigger,
+        ),
+        cpal::SampleFormat::I16 => build_stream_impl::<i16>(
+            device,
+            config,
+            writer,
+            app,
+            limit_reached.clone(),
+            recording_trigger,
+        ),
+        cpal::SampleFormat::I32 => build_stream_impl::<i32>(
+            device,
+            config,
+            writer,
+            app,
+            limit_reached.clone(),
+            recording_trigger,
+        ),
         f => Err(anyhow::anyhow!("Unsupported sample format: {:?}", f)),
     }
 }
@@ -149,13 +201,13 @@ fn build_stream_impl<T>(
     writer: SharedWriter,
     app: AppHandle,
     limit_reached_flag: Arc<AtomicBool>,
+    recording_trigger: RecordingTrigger,
 ) -> Result<cpal::Stream>
 where
     T: cpal::Sample + cpal::SizedSample + Send + 'static,
     f32: cpal::FromSample<T>,
 {
     let channels = config.channels() as usize;
-    let _sample_rate = config.sample_rate() as f32;
 
     // State for simple RMS + EMA smoothing and throttled emission
     let mut acc_sum_squares: f32 = 0.0;
@@ -165,6 +217,13 @@ where
     let mut last_emit = std::time::Instant::now();
     let start_time = std::time::Instant::now();
     let mut local_limit_triggered = false;
+
+    let is_wake_word = recording_trigger == RecordingTrigger::WakeWord;
+    let settings = crate::settings::load_settings(&app);
+    let silence_auto_stop_ms = settings.silence_timeout_ms.clamp(500, 5000);
+    let mut silence_start: Option<std::time::Instant> = None;
+    let mut silence_auto_stop_triggered = false;
+    let mut has_speech_started = false;
 
     let app_handle = app.clone();
     let writer_clone = writer.clone();
@@ -178,10 +237,14 @@ where
                     >= std::time::Duration::from_secs(MAX_RECORDING_DURATION_SECS)
             {
                 local_limit_triggered = true;
-                // Set the shared atomic flag - this is the reliable cross-thread communication
                 limit_reached_flag.store(true, Ordering::SeqCst);
-                // Also emit event for UI updates
                 let _ = app_handle.emit("recording-limit-reached", ());
+                return;
+            }
+
+            // Stop processing audio data after limit is reached
+            if local_limit_triggered {
+                return;
             }
 
             let mut recorder = writer_clone.lock();
@@ -218,11 +281,46 @@ where
                     // EMA smoothing
                     ema_level = alpha * level + (1.0 - alpha) * ema_level;
                     let _ = app_handle.emit("mic-level", ema_level);
-                    // also forward to overlay window if present
                     if let Some(overlay_window) = app_handle.get_webview_window("recording_overlay")
                     {
                         let _ = overlay_window.emit("mic-level", ema_level);
                     }
+
+                    if is_wake_word && !silence_auto_stop_triggered {
+                        if rms >= SILENCE_AUTO_STOP_SPEECH_THRESHOLD {
+                            if !has_speech_started {
+                                info!("Wake word auto-stop: speech detected (rms={:.4})", rms);
+                            }
+                            has_speech_started = true;
+                        }
+
+                        if has_speech_started {
+                            if rms < SILENCE_AUTO_STOP_THRESHOLD {
+                                if silence_start.is_none() {
+                                    silence_start = Some(std::time::Instant::now());
+                                    trace!("Wake word auto-stop: silence started (rms={:.4})", rms);
+                                }
+                                if let Some(start) = silence_start {
+                                    if start.elapsed()
+                                        >= std::time::Duration::from_millis(silence_auto_stop_ms)
+                                    {
+                                        silence_auto_stop_triggered = true;
+                                        info!(
+                                            "Wake word auto-stop: stopping after {}ms silence",
+                                            silence_auto_stop_ms
+                                        );
+                                        let app = app_handle.clone();
+                                        std::thread::spawn(move || {
+                                            crate::shortcuts::force_stop_recording(&app);
+                                        });
+                                    }
+                                }
+                            } else {
+                                silence_start = None;
+                            }
+                        }
+                    }
+
                     acc_sum_squares = 0.0;
                     acc_count = 0;
                 } else {

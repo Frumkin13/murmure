@@ -23,18 +23,21 @@ pub fn process_recording(app: &AppHandle, file_path: &Path) -> Result<String> {
         return Ok(raw_text);
     }
 
-    // 2. Dictionary & CC Rules
-    let text = apply_dictionary_and_rules(app, raw_text)?;
+    // 2. Deduplicate repeated words (transcription artifact cleanup)
+    let text = deduplicate_repeated_words(&raw_text);
+
+    // 3. Dictionary & CC Rules
+    let text = apply_dictionary_and_rules(app, text)?;
     debug!("Transcription fixed with dictionary: {}", text);
 
-    // 3. LLM Post-processing
+    // 4. LLM Post-processing
     let llm_text = apply_llm_processing(app, text)?;
 
-    // 4. Apply formatting rules
+    // 5. Apply formatting rules
     let final_text = apply_formatting_rules(app, llm_text);
     debug!("Transcription with formatting rules: {}", final_text);
 
-    // 5. Save Stats & History
+    // 6. Save Stats & History
     save_stats_and_history(app, file_path, &final_text)?;
 
     Ok(final_text)
@@ -100,46 +103,47 @@ fn apply_llm_processing(app: &AppHandle, text: String) -> Result<String> {
     match recording_mode {
         RecordingMode::Command => {
             debug!("Processing audio in Command mode");
-            let mut prompt = text.clone();
 
-            match crate::clipboard::get_selected_text(app) {
-                Ok(selected_text) => {
-                    if !selected_text.trim().is_empty() {
-                        debug!("Captured selected text for command mode successfully");
-                        prompt = format!(
-                            r#"<role>
-You are a text transformation tool, not a conversational assistant.
+            let selected_text = match crate::clipboard::get_selected_text(app) {
+                Ok(s) if !s.trim().is_empty() => {
+                    debug!("Captured selected text for command mode successfully");
+                    Some(s)
+                }
+                Ok(_) => {
+                    warn!("Selected text was empty in command mode");
+                    None
+                }
+                Err(e) => {
+                    error!("Failed to capture selected text in command mode: {}", e);
+                    None
+                }
+            };
+
+            let system_prompt = format!(
+                r#"You are a text transformation tool, not a conversational assistant.
 Your ONLY job: apply the user instruction to the input text and return the result.
 DO NOT explain, comment, or add any text beyond the transformation output.
-</role>
 
-<meta_instruction>
+Rules:
 - Return ONLY the transformed text
 - NO explanations, NO commentary, NO markdown formatting
 - If the instruction is unclear or cannot be applied: return the input text UNCHANGED
 - Never wrap the output in quotes, code blocks, or additional formatting
-</meta_instruction>
 
-<user_instruction>
-{}
-</user_instruction>
+User instruction: {}"#,
+                text
+            );
 
-<input_text>
-{}
-</input_text>"#,
-                            text, selected_text
-                        );
-                    } else {
-                        warn!("Selected text was empty in command mode");
-                    }
-                }
-                Err(e) => {
-                    error!("Failed to capture selected text in command mode: {}", e);
-                }
-            }
+            let user_prompt = match &selected_text {
+                Some(s) => s.clone(),
+                None => text.clone(),
+            };
 
-            // Call direct LLM function
-            match rt.block_on(crate::llm::process_command_with_llm(app, prompt)) {
+            match rt.block_on(crate::llm::process_command_with_llm(
+                app,
+                system_prompt,
+                user_prompt,
+            )) {
                 Ok(response) => {
                     debug!("Command processed with LLM: {}", response);
                     Ok(response)
@@ -191,6 +195,38 @@ fn apply_formatting_rules(app: &AppHandle, text: String) -> String {
     }
 }
 
+fn deduplicate_repeated_words(text: &str) -> String {
+    let words: Vec<&str> = text.split_whitespace().collect();
+    if words.is_empty() {
+        return String::new();
+    }
+
+    let mut result: Vec<&str> = Vec::with_capacity(words.len());
+    let mut i = 0;
+
+    while i < words.len() {
+        let current_lower = words[i].to_lowercase();
+        let mut count = 1;
+
+        while i + count < words.len() && words[i + count].to_lowercase() == current_lower {
+            count += 1;
+        }
+
+        if count >= 3 {
+            result.push(words[i]);
+            result.push(words[i + 1]);
+        } else {
+            for j in 0..count {
+                result.push(words[i + j]);
+            }
+        }
+
+        i += count;
+    }
+
+    result.join(" ")
+}
+
 fn save_stats_and_history(app: &AppHandle, file_path: &Path, text: &str) -> Result<()> {
     // Calculate duration and size
     let (duration_seconds, wav_size_bytes) = match hound::WavReader::open(file_path) {
@@ -221,4 +257,74 @@ fn save_stats_and_history(app: &AppHandle, file_path: &Path, text: &str) -> Resu
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn dedup_four_to_two() {
+        assert_eq!(deduplicate_repeated_words("je je je je vais"), "je je vais");
+    }
+
+    #[test]
+    fn dedup_two_kept_unchanged() {
+        assert_eq!(deduplicate_repeated_words("oui oui"), "oui oui");
+    }
+
+    #[test]
+    fn dedup_five_to_two() {
+        assert_eq!(
+            deduplicate_repeated_words("the the the the the cat"),
+            "the the cat"
+        );
+    }
+
+    #[test]
+    fn dedup_three_to_two_case_insensitive() {
+        assert_eq!(
+            deduplicate_repeated_words("Hello HELLO hello world"),
+            "Hello HELLO world"
+        );
+    }
+
+    #[test]
+    fn dedup_no_repetition() {
+        assert_eq!(
+            deduplicate_repeated_words("normal sentence"),
+            "normal sentence"
+        );
+    }
+
+    #[test]
+    fn dedup_empty_string() {
+        assert_eq!(deduplicate_repeated_words(""), "");
+    }
+
+    #[test]
+    fn dedup_single_word() {
+        assert_eq!(deduplicate_repeated_words("word"), "word");
+    }
+
+    #[test]
+    fn dedup_multiple_groups() {
+        assert_eq!(
+            deduplicate_repeated_words("the the the cat the the the dog"),
+            "the the cat the the dog"
+        );
+    }
+
+    #[test]
+    fn dedup_exactly_three_to_two() {
+        assert_eq!(
+            deduplicate_repeated_words("hello hello hello world"),
+            "hello hello world"
+        );
+    }
+
+    #[test]
+    fn dedup_one_occurrence_unchanged() {
+        assert_eq!(deduplicate_repeated_words("hello world"), "hello world");
+    }
 }

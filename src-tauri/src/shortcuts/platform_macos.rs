@@ -51,6 +51,18 @@ extern "C" {
     static kTISPropertyUnicodeKeyLayoutData: *mut c_void;
 }
 
+#[link(name = "CoreGraphics", kind = "framework")]
+extern "C" {
+    fn CGEventSourceFlagsState(stateID: i32) -> u64;
+}
+
+#[allow(non_upper_case_globals)]
+const kCGEventSourceStateCombinedSessionState: i32 = 0;
+const CG_EVENT_FLAG_MASK_CONTROL: u64 = 0x00040000;
+const CG_EVENT_FLAG_MASK_SHIFT: u64 = 0x00020000;
+const CG_EVENT_FLAG_MASK_ALTERNATE: u64 = 0x00080000;
+const CG_EVENT_FLAG_MASK_COMMAND: u64 = 0x00100000;
+
 use crate::shortcuts::accessibility_macos;
 use crate::shortcuts::registry::ShortcutRegistryState;
 use crate::shortcuts::types::{KeyEventType, ShortcutState};
@@ -149,13 +161,45 @@ impl EventProcessor {
         }
     }
 
+    fn sync_modifier_state(&self) {
+        let flags = unsafe { CGEventSourceFlagsState(kCGEventSourceStateCombinedSessionState) };
+        let mut pressed = self.pressed_keys.lock();
+        const MODIFIERS: &[(i32, u64)] = &[
+            (0x11, CG_EVENT_FLAG_MASK_CONTROL),
+            (0x10, CG_EVENT_FLAG_MASK_SHIFT),
+            (0x12, CG_EVENT_FLAG_MASK_ALTERNATE),
+            (0x5B, CG_EVENT_FLAG_MASK_COMMAND),
+        ];
+        for &(vk, mask) in MODIFIERS {
+            if flags & mask != 0 {
+                pressed.insert(vk);
+            } else {
+                pressed.remove(&vk);
+            }
+        }
+        trace!(
+            "[macOS shortcuts] Synced modifier state from OS flags: 0x{:X}",
+            flags
+        );
+    }
+
     fn handle_key_press(&self, key: i32) {
-        self.pressed_keys.lock().insert(key);
+        const MODIFIER_VK_CODES: &[i32] = &[0x11, 0x10, 0x12, 0x5B];
+        if MODIFIER_VK_CODES.contains(&key) {
+            self.sync_modifier_state();
+        } else {
+            self.pressed_keys.lock().insert(key);
+        }
         self.check_press();
     }
 
     fn handle_key_release(&self, key: i32) {
-        self.pressed_keys.lock().remove(&key);
+        const MODIFIER_VK_CODES: &[i32] = &[0x11, 0x10, 0x12, 0x5B];
+        if MODIFIER_VK_CODES.contains(&key) {
+            self.sync_modifier_state();
+        } else {
+            self.pressed_keys.lock().remove(&key);
+        }
         self.check_release();
     }
 
@@ -316,6 +360,26 @@ fn unicode_info_to_char(info: &rdev::UnicodeInfo) -> Option<char> {
     info.name.as_ref().and_then(|s| s.chars().next())
 }
 
+fn is_numpad_key(key: &Key) -> bool {
+    matches!(
+        key,
+        Key::Kp0
+            | Key::Kp1
+            | Key::Kp2
+            | Key::Kp3
+            | Key::Kp4
+            | Key::Kp5
+            | Key::Kp6
+            | Key::Kp7
+            | Key::Kp8
+            | Key::Kp9
+            | Key::KpPlus
+            | Key::KpMinus
+            | Key::KpMultiply
+            | Key::KpDivide
+    )
+}
+
 fn is_modifier_key(key: &Key) -> bool {
     matches!(
         key,
@@ -336,6 +400,11 @@ fn convert_event(event: &Event) -> Option<(i32, bool)> {
             // Modifier keys must always use the direct VK mapping to avoid
             // unicode/keycode_to_char misidentifying them as regular characters
             if is_modifier_key(key) {
+                return rdev_key_to_vk(key).map(|k| (k, true));
+            }
+            // Numpad keys - must use physical mapping, not unicode
+            // (unicode would match regular digit VK codes instead of numpad VK codes)
+            if is_numpad_key(key) {
                 return rdev_key_to_vk(key).map(|k| (k, true));
             }
             // Try unicode info first (available when no Control/Command modifier)
@@ -359,6 +428,10 @@ fn convert_event(event: &Event) -> Option<(i32, bool)> {
         EventType::KeyRelease(key) => {
             // Same logic as KeyPress for consistency
             if is_modifier_key(key) {
+                return rdev_key_to_vk(key).map(|k| (k, false));
+            }
+            // Numpad keys - must use physical mapping, not unicode
+            if is_numpad_key(key) {
                 return rdev_key_to_vk(key).map(|k| (k, false));
             }
             if let Some(ref unicode_info) = event.unicode {
@@ -434,6 +507,17 @@ fn char_to_vk(c: char) -> Option<i32> {
         '8' => Some(0x38),
         '9' => Some(0x39),
         ' ' => Some(0x20),
+        // OEM characters
+        '-' => Some(0xBD),
+        '=' => Some(0xBB),
+        '[' => Some(0xDB),
+        ']' => Some(0xDD),
+        ';' => Some(0xBA),
+        '\'' => Some(0xDE),
+        ',' => Some(0xBC),
+        '.' => Some(0xBE),
+        '/' => Some(0xBF),
+        '\\' => Some(0xDC),
         _ => None,
     }
 }
@@ -493,6 +577,33 @@ fn rdev_key_to_vk(key: &Key) -> Option<i32> {
         Key::F10 => Some(0x79),
         Key::F11 => Some(0x7A),
         Key::F12 => Some(0x7B),
+        // F13-F20
+        Key::F13 => Some(0x7C),
+        Key::F14 => Some(0x7D),
+        Key::F15 => Some(0x7E),
+        Key::F16 => Some(0x7F),
+        Key::F17 => Some(0x80),
+        Key::F18 => Some(0x81),
+        Key::F19 => Some(0x82),
+        Key::F20 => Some(0x83),
+        // Numpad
+        Key::Kp0 => Some(0x60),
+        Key::Kp1 => Some(0x61),
+        Key::Kp2 => Some(0x62),
+        Key::Kp3 => Some(0x63),
+        Key::Kp4 => Some(0x64),
+        Key::Kp5 => Some(0x65),
+        Key::Kp6 => Some(0x66),
+        Key::Kp7 => Some(0x67),
+        Key::Kp8 => Some(0x68),
+        Key::Kp9 => Some(0x69),
+        Key::KpMultiply => Some(0x6A),
+        Key::KpPlus => Some(0x6B),
+        Key::KpMinus => Some(0x6D),
+        Key::KpDivide => Some(0x6F),
+        // Special keys
+        Key::BackQuote => Some(0xC0),
+        Key::IntlBackslash => Some(0xE2),
         Key::Space => Some(0x20),
         Key::Return => Some(0x0D),
         Key::Escape => Some(0x1B),
@@ -508,6 +619,17 @@ fn rdev_key_to_vk(key: &Key) -> Option<i32> {
         Key::DownArrow => Some(0x28),
         Key::LeftArrow => Some(0x25),
         Key::RightArrow => Some(0x27),
+        // OEM keys
+        Key::Minus => Some(0xBD),
+        Key::Equal => Some(0xBB),
+        Key::LeftBracket => Some(0xDB),
+        Key::RightBracket => Some(0xDD),
+        Key::SemiColon => Some(0xBA),
+        Key::Quote => Some(0xDE),
+        Key::Comma => Some(0xBC),
+        Key::Dot => Some(0xBE),
+        Key::Slash => Some(0xBF),
+        Key::BackSlash => Some(0xDC),
         _ => None,
     }
 }

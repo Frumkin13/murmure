@@ -11,6 +11,8 @@ import {
     Wrench,
     AlignLeft,
     Newspaper,
+    Mic,
+    ArrowDownUp,
 } from 'lucide-react';
 import { Link } from '@tanstack/react-router';
 import { useState } from 'react';
@@ -52,6 +54,12 @@ const getPersonalizeSubItems = (t: (key: string) => string) => [
         icon: Sparkles,
         dataTestId: 'llm-connect-tab',
     },
+    {
+        name: t('Voice Mode'),
+        url: '/personalize/voice-mode',
+        icon: Mic,
+        dataTestId: 'voice-mode-tab',
+    },
 ];
 
 const getSettingsSubItems = (t: (key: string) => string) => [
@@ -67,6 +75,12 @@ const getSettingsSubItems = (t: (key: string) => string) => [
         icon: Power,
         dataTestId: 'system-tab',
     },
+    {
+        name: t('Import / Export'),
+        url: '/settings/import-export',
+        icon: ArrowDownUp,
+        dataTestId: 'import-export-tab',
+    },
 ];
 
 export const AppSidebar = () => {
@@ -79,19 +93,15 @@ export const AppSidebar = () => {
     const settingsSubItems = getSettingsSubItems(t);
 
     return (
-        <Sidebar className="bg-zinc-900 border-zinc-700 border-r overflow-hidden w-[14.3rem]">
-            <SidebarHeader className="flex items-center justify-center bg-zinc-900 border-b border-zinc-700">
+        <Sidebar className="bg-background border-border border-r overflow-hidden w-[14.3rem]">
+            <SidebarHeader className="flex items-center justify-center bg-background border-b border-border">
                 <img src="app-icon.png" alt="logo" className="w-16 h-16" />
             </SidebarHeader>
-            <SidebarContent className="bg-zinc-900">
+            <SidebarContent className="bg-background">
                 <SidebarGroup>
                     <SidebarMenu>
                         <SidebarMenuItem>
-                            <SidebarMenuButton
-                                asChild
-                                isActive={pathname === '/'}
-                                data-testid="home-tab"
-                            >
+                            <SidebarMenuButton asChild isActive={pathname === '/'} data-testid="home-tab">
                                 <Link to="/">
                                     <Home />
                                     <span>{t('Home')}</span>
@@ -101,9 +111,7 @@ export const AppSidebar = () => {
 
                         <SidebarMenuItem>
                             <SidebarMenuButton
-                                onClick={() =>
-                                    setPersonalizeOpen(!personalizeOpen)
-                                }
+                                onClick={() => setPersonalizeOpen(!personalizeOpen)}
                                 data-testid="personalize-tab"
                             >
                                 <Wrench />
@@ -115,14 +123,8 @@ export const AppSidebar = () => {
                             {personalizeOpen && (
                                 <SidebarMenuSub>
                                     {personalizeSubItems.map((item) => (
-                                        <SidebarMenuSubItem
-                                            key={item.url}
-                                            data-testid={item.dataTestId}
-                                        >
-                                            <SidebarMenuSubButton
-                                                asChild
-                                                isActive={pathname === item.url}
-                                            >
+                                        <SidebarMenuSubItem key={item.url} data-testid={item.dataTestId}>
+                                            <SidebarMenuSubButton asChild isActive={pathname === item.url}>
                                                 <Link to={item.url}>
                                                     <item.icon />
                                                     <span>{item.name}</span>
@@ -148,14 +150,8 @@ export const AppSidebar = () => {
                             {settingsOpen && (
                                 <SidebarMenuSub>
                                     {settingsSubItems.map((item) => (
-                                        <SidebarMenuSubItem
-                                            key={item.url}
-                                            data-testid={item.dataTestId}
-                                        >
-                                            <SidebarMenuSubButton
-                                                asChild
-                                                isActive={pathname === item.url}
-                                            >
+                                        <SidebarMenuSubItem key={item.url} data-testid={item.dataTestId}>
+                                            <SidebarMenuSubButton asChild isActive={pathname === item.url}>
                                                 <Link to={item.url}>
                                                     <item.icon />
                                                     <span>{item.name}</span>
@@ -168,11 +164,7 @@ export const AppSidebar = () => {
                         </SidebarMenuItem>
 
                         <SidebarMenuItem>
-                            <SidebarMenuButton
-                                asChild
-                                isActive={pathname === '/about'}
-                                data-testid="about-tab"
-                            >
+                            <SidebarMenuButton asChild isActive={pathname === '/about'} data-testid="about-tab">
                                 <Link to="/about">
                                     <Info />
                                     <span>{t('About')}</span>
@@ -182,12 +174,12 @@ export const AppSidebar = () => {
                     </SidebarMenu>
                 </SidebarGroup>
             </SidebarContent>
-            <SidebarFooter className="bg-zinc-900 ">
+            <SidebarFooter className="bg-background ">
                 <a
-                    href="https://github.com/Kieirra/murmure/releases/latest"
+                    href={version.length > 0 ? `https://github.com/Kieirra/murmure/releases/tag/${version}` : 'https://github.com/Kieirra/murmure/releases/latest'}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-zinc-500 text-xs hover:text-zinc-300 transition-colors flex items-center gap-2 px-2"
+                    className="text-muted-foreground text-xs hover:text-foreground transition-colors flex items-center gap-2 px-2"
                 >
                     <Newspaper className="w-4 h-4" />
                     <span>{t('Release notes')}</span>
@@ -196,7 +188,7 @@ export const AppSidebar = () => {
                     href="https://github.com/Kieirra/murmure/issues/new"
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-zinc-500 text-xs hover:text-zinc-300 transition-colors flex items-center gap-2 px-2"
+                    className="text-muted-foreground text-xs hover:text-foreground transition-colors flex items-center gap-2 px-2"
                 >
                     <Bug className="w-4 h-4" />
                     <span>{t('Report a bug')}</span>
@@ -204,7 +196,7 @@ export const AppSidebar = () => {
                 <Separator />
                 <div className="flex items-center gap-2 justify-center">
                     <UpdateChecker />
-                    <p className="text-xs text-zinc-500">{version}</p>
+                    <p className="text-xs text-muted-foreground">{version}</p>
                 </div>
             </SidebarFooter>
         </Sidebar>

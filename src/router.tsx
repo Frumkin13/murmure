@@ -1,17 +1,14 @@
-import {
-    createRouter,
-    createRoute,
-    createRootRoute,
-    Navigate,
-} from '@tanstack/react-router';
+import { createRouter, createRoute, createRootRoute, Navigate } from '@tanstack/react-router';
 import { Home } from './features/home/home';
 import { Layout } from './features/layout/layout';
 import { About } from './features/about/about';
 import { Shortcuts } from './features/settings/shortcuts/shortcuts';
-import { CustomDictionary } from './features/settings/custom-dictionary/custom-dictionary';
-import { FormattingRules } from './features/settings/formatting-rules/formatting-rules';
+import { CustomDictionary } from './features/personalize/custom-dictionary/custom-dictionary';
+import { FormattingRules } from './features/personalize/formatting-rules/formatting-rules';
 import { System } from './features/settings/system/system';
-import { LLMConnect } from './features/llm-connect/llm-connect';
+import { LLMConnect } from './features/personalize/llm-connect/llm-connect';
+import { VoiceMode } from './features/personalize/voice-mode/voice-mode';
+import { ImportExport } from './features/settings/import-export/import-export';
 
 const rootRoute = createRootRoute({
     component: () => <Layout />,
@@ -65,6 +62,18 @@ const personalizeIndexRoute = createRoute({
     component: () => <Navigate to="/personalize/custom-dictionary" />,
 });
 
+const personalizeVoiceModeRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: '/personalize/voice-mode',
+    component: VoiceMode,
+});
+
+const settingsImportExportRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: '/settings/import-export',
+    component: ImportExport,
+});
+
 const aboutRoute = createRoute({
     getParentRoute: () => rootRoute,
     path: '/about',
@@ -76,10 +85,12 @@ const routeTree = rootRoute.addChildren([
     settingsIndexRoute,
     settingsShortcutsRoute,
     settingsSystemRoute,
+    settingsImportExportRoute,
     personalizeIndexRoute,
     personalizeCustomDictionaryRoute,
     personalizeFormattingRulesRoute,
     personalizeLLMConnectRoute,
+    personalizeVoiceModeRoute,
     aboutRoute,
 ]);
 

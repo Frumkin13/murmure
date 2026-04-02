@@ -8,18 +8,15 @@ import { OnboardingTask } from './onboarding-task/onboarding-task';
 export const Onboarding = ({ recordShortcut }: { recordShortcut?: string }) => {
     const { t } = useTranslation();
     const { state, refresh } = useOnboardingState();
-    const {
-        doneCount,
-        isCompleted,
-        showCongrats,
-        completeAndDismiss,
-        dismissCongrats,
-    } = useOnboardingCalculations(state, refresh);
+    const { doneCount, isCompleted, showCongrats, completeAndDismiss, dismissCongrats } = useOnboardingCalculations(
+        state,
+        refresh
+    );
 
     if (isCompleted) {
         if (!showCongrats) {
             return (
-                <Typography.Paragraph className="text-zinc-400">
+                <Typography.Paragraph className="text-muted-foreground">
                     {t('Murmure use default microphone to record your voice.')}
                 </Typography.Paragraph>
             );
@@ -29,15 +26,13 @@ export const Onboarding = ({ recordShortcut }: { recordShortcut?: string }) => {
                 <div className="flex items-center gap-2 justify-between">
                     <Typography.Paragraph className="text-sky-300! font-bold flex gap-2 items-center">
                         <BadgeCheck />
-                        {t(
-                            "Perfect! You're all set to use Murmure everywhere."
-                        )}
+                        {t("Perfect! You're all set to use Murmure everywhere.")}
                     </Typography.Paragraph>
                     <button
                         type="button"
                         onClick={dismissCongrats}
                         aria-label={t('Close')}
-                        className="text-zinc-400 hover:text-zinc-200"
+                        className="text-muted-foreground hover:text-foreground"
                     >
                         <X className="w-4 h-4 cursor-pointer" />
                     </button>
@@ -49,14 +44,12 @@ export const Onboarding = ({ recordShortcut }: { recordShortcut?: string }) => {
     return (
         <div className="rounded-md border border-sky-500 bg-sky-900/20 p-4 space-y-2 relative">
             <div className="absolute top-2 right-2 flex">
-                <Typography.Paragraph className="text-sky-300! font-bold">
-                    {doneCount}/3
-                </Typography.Paragraph>
+                <Typography.Paragraph className="text-sky-300! font-bold">{doneCount}/3</Typography.Paragraph>
                 <button
                     type="button"
                     onClick={completeAndDismiss}
                     aria-label={t('Cancel')}
-                    className=" text-zinc-400 hover:text-zinc-200 px-2 p-0.5"
+                    className=" text-muted-foreground hover:text-foreground px-2 p-0.5"
                 >
                     <X className="w-4 h-4 cursor-pointer" />
                 </button>
@@ -66,12 +59,9 @@ export const Onboarding = ({ recordShortcut }: { recordShortcut?: string }) => {
                     done={state.used_home_shortcut}
                     label={
                         recordShortcut != null
-                            ? t(
-                                  'To test transcription, press "{{recordShortcut}}", talk, then release',
-                                  {
-                                      recordShortcut,
-                                  }
-                              )
+                            ? t('To test transcription, press "{{recordShortcut}}", talk, then release', {
+                                  recordShortcut,
+                              })
                             : t('Use the record shortcut on the Home page')
                     }
                     description={t(

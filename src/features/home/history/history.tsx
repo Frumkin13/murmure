@@ -33,16 +33,16 @@ export const History = () => {
     };
 
     return (
-        <div className="space-y-2 w-full mb-8">
+        <div className="space-y-2 w-full">
             <div className="flex items-center justify-between">
                 <Typography.Title className="flex items-center gap-2">
                     {t('Recent activity')}{' '}
                     <Tooltip>
                         <TooltipTrigger asChild>
-                            <InfoIcon className="size-4 inline-block text-zinc-400 cursor-pointer" />
+                            <InfoIcon className="size-4 inline-block text-muted-foreground cursor-pointer" />
                         </TooltipTrigger>
                         <TooltipContent>
-                            <Typography.Paragraph className="text-zinc-100 text-xs">
+                            <Typography.Paragraph className="text-foreground text-xs">
                                 {t(
                                     'All audio is deleted. No telemetry, no tracking. Only the last five text transcriptions are stored on your computer.'
                                 )}
@@ -52,7 +52,7 @@ export const History = () => {
                 </Typography.Title>
                 <Dialog>
                     <DialogTrigger asChild>
-                        <Trash2 className="size-4 cursor-pointer hover:text-zinc-100 text-zinc-400 transition-colors" />
+                        <Trash2 className="size-4 cursor-pointer hover:text-foreground text-muted-foreground transition-colors" />
                     </DialogTrigger>
                     <DialogContent>
                         <DialogHeader>
@@ -67,16 +67,13 @@ export const History = () => {
                             <DialogClose asChild>
                                 <Button
                                     variant="outline"
-                                    className="bg-zinc-800 border border-zinc-700 hover:bg-zinc-700 hover:text-zinc-100"
+                                    className="bg-card border border-border hover:bg-accent hover:text-foreground"
                                 >
                                     {t('Cancel')}
                                 </Button>
                             </DialogClose>
                             <DialogClose asChild>
-                                <Button
-                                    variant="destructive"
-                                    onClick={handleClearHistory}
-                                >
+                                <Button variant="destructive" onClick={handleClearHistory}>
                                     {t('Clear')}
                                 </Button>
                             </DialogClose>
@@ -85,21 +82,17 @@ export const History = () => {
                 </Dialog>
             </div>
             {history.length === 0 ? (
-                <Typography.Paragraph>
-                    {t('No transcriptions yet')}
-                </Typography.Paragraph>
+                <Typography.Paragraph>{t('No transcriptions yet')}</Typography.Paragraph>
             ) : (
                 <div className="space-y-2">
                     {history.map((entry) => (
                         <button
                             key={entry.id}
-                            className="w-full text-left rounded-md border border-zinc-700 p-3 hover:bg-zinc-800 cursor-pointer"
+                            className="w-full text-left rounded-md border border-border p-3 hover:bg-accent cursor-pointer"
                             onClick={async () => {
                                 if (!entry.text) return;
                                 try {
-                                    await navigator.clipboard.writeText(
-                                        entry.text
-                                    );
+                                    await navigator.clipboard.writeText(entry.text);
                                     toast.info(t('Copied to clipboard'), {
                                         autoClose: 1500,
                                     });
@@ -111,9 +104,7 @@ export const History = () => {
                             <div className="flex items-start justify-between gap-3">
                                 <Typography.Paragraph>
                                     {entry.text === '' ? (
-                                        <span className="italic text-xs">
-                                            {t('(Empty transcription)')}
-                                        </span>
+                                        <span className="italic text-xs">{t('(Empty transcription)')}</span>
                                     ) : (
                                         entry.text
                                     )}

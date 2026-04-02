@@ -106,7 +106,17 @@ fn handle_recording_event<F>(
                 if *recording_source == target {
                     shortcut_state.set_toggled(false);
                     stop_recording(app, &mut recording_source);
+                    *recording_state().last_toggle_stop.lock() = std::time::Instant::now();
                 } else if *recording_source == RecordingSource::None {
+                    // Guard against X11 auto-repeat: after a stop, queued synthetic
+                    // Release events can arrive within milliseconds and would
+                    // immediately restart recording. 500ms cooldown prevents this.
+                    if recording_state().last_toggle_stop.lock().elapsed()
+                        < Duration::from_millis(250)
+                    {
+                        info!("ToggleToTalk start ignored (cooldown after stop)");
+                        return;
+                    }
                     shortcut_state.set_toggled(true);
                     start_recording(app, &mut recording_source, target, start_fn);
                 }
@@ -146,16 +156,20 @@ fn stop_recording(app: &AppHandle, recording_source: &mut RecordingSource) {
 pub fn force_stop_recording(app: &AppHandle) {
     let shortcut_state = app.state::<ShortcutState>();
     shortcut_state.set_toggled(false);
-    let mut recording_source = recording_state().source.lock();
-    *recording_source = RecordingSource::None;
+    {
+        let mut recording_source = recording_state().source.lock();
+        *recording_source = RecordingSource::None;
+    }
     let _ = crate::audio::stop_recording(app);
 }
 
 pub fn force_cancel_recording(app: &AppHandle) {
     let shortcut_state = app.state::<ShortcutState>();
     shortcut_state.set_toggled(false);
-    let mut recording_source = recording_state().source.lock();
-    *recording_source = RecordingSource::None;
+    {
+        let mut recording_source = recording_state().source.lock();
+        *recording_source = RecordingSource::None;
+    }
     crate::audio::cancel_recording(app);
 }
 

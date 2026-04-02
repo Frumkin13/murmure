@@ -1,4 +1,10 @@
+use crate::settings::AppSettings;
 use tauri::{command, AppHandle};
+
+#[command]
+pub fn get_all_settings(app: AppHandle) -> Result<AppSettings, String> {
+    Ok(crate::settings::load_settings(&app))
+}
 
 #[command]
 pub fn get_current_language(app: AppHandle) -> Result<String, String> {
@@ -26,24 +32,29 @@ pub fn get_current_mic_id(app: AppHandle) -> Result<Option<String>, String> {
 }
 
 #[command]
-pub fn set_current_mic_id(app: AppHandle, mic_id: Option<String>) -> Result<(), String> {
+pub fn set_current_mic_id(
+    app: AppHandle,
+    mic_id: Option<String>,
+    mic_label: Option<String>,
+) -> Result<(), String> {
     let mut s = crate::settings::load_settings(&app);
     s.mic_id = mic_id.clone();
+    s.mic_label = mic_label;
     crate::settings::save_settings(&app, &s)?;
     crate::audio::microphone::update_mic_cache(&app, mic_id);
     Ok(())
 }
 
 #[command]
-pub fn get_mic_list() -> Result<Vec<String>, String> {
-    let mic_list = crate::audio::microphone::get_mic_list();
-    Ok(mic_list)
+pub fn get_current_mic_label(app: AppHandle) -> Result<Option<String>, String> {
+    let s = crate::settings::load_settings(&app);
+    Ok(s.mic_label)
 }
 
 #[command]
-pub fn get_sound_enabled(app: AppHandle) -> Result<bool, String> {
-    let s = crate::settings::load_settings(&app);
-    Ok(s.sound_enabled)
+pub fn get_mic_list() -> Result<Vec<crate::audio::types::MicInfo>, String> {
+    let mic_list = crate::audio::microphone::get_mic_list();
+    Ok(mic_list)
 }
 
 #[command]
@@ -51,12 +62,6 @@ pub fn set_sound_enabled(app: AppHandle, enabled: bool) -> Result<(), String> {
     let mut s = crate::settings::load_settings(&app);
     s.sound_enabled = enabled;
     crate::settings::save_settings(&app, &s)
-}
-
-#[command]
-pub fn get_log_level(app: AppHandle) -> Result<String, String> {
-    let s = crate::settings::load_settings(&app);
-    Ok(s.log_level)
 }
 
 #[command]
@@ -75,4 +80,11 @@ pub fn set_log_level(app: AppHandle, level: String) -> Result<(), String> {
     }
 
     Ok(())
+}
+
+#[command]
+pub fn set_show_in_dock(app: AppHandle, show: bool) -> Result<(), String> {
+    let mut s = crate::settings::load_settings(&app);
+    s.show_in_dock = show;
+    crate::settings::save_settings(&app, &s)
 }

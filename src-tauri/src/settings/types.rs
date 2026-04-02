@@ -1,26 +1,23 @@
 use serde::{Deserialize, Serialize};
 
-fn default_cancel_shortcut() -> String {
-    "escape".to_string()
-}
-
 #[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
+#[serde(rename_all = "snake_case")]
 pub enum PasteMethod {
     #[default]
+    #[serde(alias = "CtrlV")]
     CtrlV,
+    #[serde(alias = "CtrlShiftV")]
     CtrlShiftV,
+    #[serde(alias = "Direct")]
     Direct,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
+#[serde(default)]
 pub struct OnboardingState {
-    #[serde(default)]
     pub used_home_shortcut: bool,
-    #[serde(default)]
     pub transcribed_outside_app: bool,
-    #[serde(default)]
     pub added_dictionary_word: bool,
-    #[serde(default)]
     pub congrats_dismissed: bool,
 }
 
@@ -37,26 +34,29 @@ pub struct AppSettings {
     pub llm_mode_4_shortcut: String,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub dictionary: Vec<String>,
-    pub record_mode: String,      // "push_to_talk" | "toggle_to_talk"
-    pub overlay_mode: String,     // "hidden" | "recording" | "always"
-    pub overlay_position: String, // "top" | "bottom"
-    pub api_enabled: bool,        // Enable local HTTP API
-    pub api_port: u16,            // Port for local HTTP API
-    pub copy_to_clipboard: bool,  // Keep transcription in clipboard after recording finishes
-    #[serde(default)]
+    pub record_mode: String,       // "push_to_talk" | "toggle_to_talk"
+    pub overlay_mode: String,      // "hidden" | "recording" | "always"
+    pub overlay_position: String,  // "top" | "bottom"
+    pub api_enabled: bool,         // Enable local HTTP API
+    pub api_port: u16,             // Port for local HTTP API
+    pub copy_to_clipboard: bool,   // Keep transcription in clipboard after recording finishes
     pub paste_method: PasteMethod, // Paste method: CtrlV or CtrlShiftV (for terminals)
-    #[serde(default)]
-    pub persist_history: bool, // Persist last 5 transcriptions to disk
-    #[serde(default)]
-    pub language: String, // UI language code (e.g., "en", "fr")
-    #[serde(default)]
+    pub persist_history: bool,     // Persist last 5 transcriptions to disk
+    pub language: String,          // UI language code (e.g., "en", "fr")
     pub sound_enabled: bool,
-    #[serde(default)]
     pub onboarding: OnboardingState,
-    #[serde(default = "default_cancel_shortcut")]
-    pub cancel_shortcut: String, // Shortcut to cancel active recording
-    pub mic_id: Option<String>, // Optional microphone device ID
-    pub log_level: String,      // "info" | "debug" | "trace" | "warn" | "error"
+    pub cancel_shortcut: String,   // Shortcut to cancel active recording
+    pub mic_id: Option<String>,    // Optional microphone device ID
+    pub mic_label: Option<String>, // Friendly name of the selected microphone (persisted for disconnected state)
+    pub log_level: String,         // "info" | "debug" | "trace" | "warn" | "error"
+    pub wake_word_enabled: bool,
+    pub wake_word_record: String,
+    pub wake_word_command: String,
+    pub wake_word_cancel: String,
+    pub wake_word_validate: String,
+    pub auto_enter_after_wake_word: bool,
+    pub silence_timeout_ms: u64,
+    pub show_in_dock: bool,
 }
 
 impl Default for AppSettings {
@@ -78,13 +78,22 @@ impl Default for AppSettings {
             api_port: 4800,
             copy_to_clipboard: false,
             paste_method: PasteMethod::default(),
-            persist_history: true,
+            persist_history: false,
             language: "default".to_string(),
             sound_enabled: true,
             onboarding: OnboardingState::default(),
             cancel_shortcut: "escape".to_string(),
             mic_id: None,
+            mic_label: None,
             log_level: "info".to_string(),
+            wake_word_enabled: false,
+            wake_word_record: "ok alix".to_string(),
+            wake_word_command: "alix command".to_string(),
+            wake_word_cancel: "alix cancel".to_string(),
+            wake_word_validate: "alix validate".to_string(),
+            auto_enter_after_wake_word: false,
+            silence_timeout_ms: 1500,
+            show_in_dock: true,
         }
     }
 }
