@@ -2,54 +2,98 @@ import { invoke } from '@tauri-apps/api/core';
 import { MAX_LLM_MODES } from '../import-export.constants';
 import { CategoryKey, ExportedCategories, ImportStrategy } from '../import-export.types';
 import { FormattingRule, FormattingSettings } from '@/features/personalize/formatting-rules/types';
-import { LLMConnectSettings } from '@/features/personalize/llm-connect/hooks/use-llm-connect';
+import { LLMConnectSettings } from '@/features/extensions/llm-connect/hooks/use-llm-connect';
 
 const applySettings = async (categories: ExportedCategories): Promise<void> => {
-    const s = categories.settings;
-    if (s == null) {
+    const settings = categories.settings;
+    if (settings == null) {
         return;
     }
-    await invoke('set_record_mode', { mode: s.record_mode });
-    await invoke('set_overlay_mode', { mode: s.overlay_mode });
-    await invoke('set_overlay_position', { position: s.overlay_position });
-    await invoke('set_api_enabled', { enabled: s.api_enabled });
-    await invoke('set_api_port', { port: s.api_port });
-    await invoke('set_copy_to_clipboard', { enabled: s.copy_to_clipboard });
-    await invoke('set_paste_method', { method: s.paste_method });
-    await invoke('set_persist_history', { enabled: s.persist_history });
-    await invoke('set_current_language', { lang: s.language });
-    await invoke('set_sound_enabled', { enabled: s.sound_enabled });
-    await invoke('set_log_level', { level: s.log_level });
-    await invoke('set_show_in_dock', { show: s.show_in_dock });
+    await invoke('set_record_mode', { mode: settings.record_mode });
+    await invoke('set_overlay_mode', { mode: settings.overlay_mode });
+    await invoke('set_overlay_position', { position: settings.overlay_position });
+    await invoke('set_api_enabled', { enabled: settings.api_enabled });
+    await invoke('set_api_port', { port: settings.api_port });
+    await invoke('set_copy_to_clipboard', { enabled: settings.copy_to_clipboard });
+    await invoke('set_paste_method', { method: settings.paste_method });
+    await invoke('set_persist_history', { enabled: settings.persist_history });
+    await invoke('set_current_language', { lang: settings.language });
+    await invoke('set_sound_enabled', { enabled: settings.sound_enabled });
+    await invoke('set_log_level', { level: settings.log_level });
+    await invoke('set_show_in_dock', { show: settings.show_in_dock });
+    if (settings.streaming_preview != null) {
+        await invoke('set_streaming_preview', { enabled: settings.streaming_preview });
+    }
+    if (settings.overlay_size != null) {
+        await invoke('set_overlay_size', { size: settings.overlay_size });
+    }
+    if (
+        settings.streaming_text_width != null &&
+        settings.streaming_font_size != null &&
+        settings.streaming_max_lines != null
+    ) {
+        await invoke('set_streaming_text_settings', {
+            textWidth: settings.streaming_text_width,
+            fontSize: settings.streaming_font_size,
+            maxLines: settings.streaming_max_lines,
+        });
+    }
+};
+
+const applyVoiceMode = async (categories: ExportedCategories): Promise<void> => {
+    const voiceMode = categories.voice_mode;
+    if (voiceMode == null) {
+        return;
+    }
+    await invoke('set_wake_word_enabled', { enabled: voiceMode.wake_word_enabled });
+    await invoke('set_wake_word_record', { word: voiceMode.wake_word_record });
+    await invoke('set_wake_word_command', { word: voiceMode.wake_word_command });
+    await invoke('set_wake_word_cancel', { word: voiceMode.wake_word_cancel });
+    await invoke('set_wake_word_validate', { word: voiceMode.wake_word_validate });
+    await invoke('set_wake_word_submit', { word: voiceMode.wake_word_submit });
+    await invoke('set_auto_enter_after_wake_word', { enabled: voiceMode.auto_enter_after_wake_word });
+    await invoke('set_silence_timeout_ms', { value: voiceMode.silence_timeout_ms });
+};
+
+const applySmartMic = async (categories: ExportedCategories): Promise<void> => {
+    const smartmic = categories.smartmic;
+    if (smartmic == null) {
+        return;
+    }
+    await invoke('set_smartmic_enabled', { enabled: smartmic.smartmic_enabled });
+    await invoke('set_smartmic_port', { port: smartmic.smartmic_port });
+    await invoke('set_smartmic_relay_enabled', { enabled: smartmic.smartmic_relay_enabled });
+    await invoke('set_smartmic_relay_url', { url: smartmic.smartmic_relay_url });
+    await invoke('set_smartmic_machine_id_enabled', { enabled: smartmic.smartmic_machine_id_enabled });
+    await invoke('set_smartmic_machine_id', { id: smartmic.smartmic_machine_id });
+    await invoke('set_smartmic_token_ttl_hours', { hours: smartmic.smartmic_token_ttl_hours });
+    await invoke('set_smartmic_bind_address', { address: smartmic.smartmic_bind_address });
 };
 
 const applyShortcuts = async (categories: ExportedCategories): Promise<void> => {
-    const s = categories.shortcuts;
-    if (s == null) {
+    const shortcuts = categories.shortcuts;
+    if (shortcuts == null) {
         return;
     }
     // Sequential to avoid race conditions on shortcut re-registration
-    await invoke('set_record_shortcut', { binding: s.record_shortcut });
+    await invoke('set_record_shortcut', { binding: shortcuts.record_shortcut });
     await invoke('set_last_transcript_shortcut', {
-        binding: s.last_transcript_shortcut,
+        binding: shortcuts.last_transcript_shortcut,
     });
-    await invoke('set_llm_record_shortcut', {
-        binding: s.llm_record_shortcut,
-    });
-    await invoke('set_command_shortcut', { binding: s.command_shortcut });
+    await invoke('set_command_shortcut', { binding: shortcuts.command_shortcut });
     await invoke('set_llm_mode_1_shortcut', {
-        binding: s.llm_mode_1_shortcut,
+        binding: shortcuts.llm_mode_1_shortcut,
     });
     await invoke('set_llm_mode_2_shortcut', {
-        binding: s.llm_mode_2_shortcut,
+        binding: shortcuts.llm_mode_2_shortcut,
     });
     await invoke('set_llm_mode_3_shortcut', {
-        binding: s.llm_mode_3_shortcut,
+        binding: shortcuts.llm_mode_3_shortcut,
     });
     await invoke('set_llm_mode_4_shortcut', {
-        binding: s.llm_mode_4_shortcut,
+        binding: shortcuts.llm_mode_4_shortcut,
     });
-    await invoke('set_cancel_shortcut', { binding: s.cancel_shortcut });
+    await invoke('set_cancel_shortcut', { binding: shortcuts.cancel_shortcut });
 };
 
 const applyFormattingRules = async (categories: ExportedCategories, strategy: ImportStrategy): Promise<void> => {
@@ -83,10 +127,6 @@ const applyFormattingRules = async (categories: ExportedCategories, strategy: Im
     });
 };
 
-/**
- * Applies LLM Connect settings import.
- * Returns the number of modes skipped during merge (due to the 4-mode limit).
- */
 const applyLlmConnect = async (categories: ExportedCategories, strategy: ImportStrategy): Promise<number> => {
     const imported = categories.llm_connect;
     if (imported == null) {
@@ -122,7 +162,8 @@ const applyLlmConnect = async (categories: ExportedCategories, strategy: ImportS
         url: imported.url ?? current.url,
         remote_url: imported.remote_url ?? current.remote_url,
         remote_privacy_acknowledged: imported.remote_privacy_acknowledged ?? current.remote_privacy_acknowledged,
-        onboarding_completed: imported.modes.length > 0 ? true : (imported.onboarding_completed ?? current.onboarding_completed),
+        onboarding_completed:
+            imported.modes.length > 0 ? true : (imported.onboarding_completed ?? current.onboarding_completed),
         modes,
         active_mode_index: activeIndex,
         model: '',
@@ -168,9 +209,6 @@ const applyDictionary = async (categories: ExportedCategories, strategy: ImportS
     }
 };
 
-/**
- * Applies a single category import. Returns the number of skipped LLM modes (0 for other categories).
- */
 export const applySingleCategory = async (
     categoryKey: CategoryKey,
     categories: ExportedCategories,
@@ -182,6 +220,12 @@ export const applySingleCategory = async (
             return 0;
         case 'shortcuts':
             await applyShortcuts(categories);
+            return 0;
+        case 'voice_mode':
+            await applyVoiceMode(categories);
+            return 0;
+        case 'smartmic':
+            await applySmartMic(categories);
             return 0;
         case 'formatting_rules':
             await applyFormattingRules(categories, strategies.formatting_rules ?? 'replace');

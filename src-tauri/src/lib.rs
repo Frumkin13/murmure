@@ -15,9 +15,13 @@ mod onboarding;
 mod overlay;
 mod settings;
 mod shortcuts;
+mod smartmic;
 mod stats;
 mod utils;
 mod wake_word;
+
+#[cfg(target_os = "linux")]
+pub use utils::platform::is_wayland_session;
 
 use crate::shortcuts::init_shortcuts;
 use audio::preload_engine;
@@ -28,15 +32,22 @@ use http_api::HttpApiState;
 use log::{error, info, warn};
 use model::Model;
 use overlay::tray::setup_tray;
+use smartmic::SmartMicState;
 use std::str::FromStr;
 use std::sync::Arc;
 use tauri::{DeviceEventFilter, Listener, Manager};
 use tauri_plugin_autostart::ManagerExt;
-use tauri_plugin_log::{Target, TargetKind};
+use tauri_plugin_log::{Target, TargetKind, TimezoneStrategy};
 use wake_word::types::WakeWordState;
 
 fn show_main_window(app: &tauri::AppHandle) {
     if let Some(main_window) = app.get_webview_window("main") {
+        // Wayland compositors flag hidden-to-tray windows as minimised;
+        // `show()` alone leaves the webview frozen (Handy pattern).
+        match main_window.unminimize() {
+            Ok(_) => (),
+            Err(e) => warn!("Failed to unminimize window: {}", e),
+        }
         match main_window.show() {
             Ok(_) => (),
             Err(e) => error!("Failed to show window: {}", e),
@@ -51,6 +62,14 @@ fn show_main_window(app: &tauri::AppHandle) {
 }
 
 pub fn run() {
+    // rustls 0.23 panics on first TLS load without an explicit CryptoProvider.
+    if rustls::crypto::ring::default_provider()
+        .install_default()
+        .is_err()
+    {
+        log::warn!("Rustls crypto provider was already installed");
+    }
+
     tauri::Builder::default()
         .plugin(
             tauri_plugin_log::Builder::new()
@@ -59,6 +78,7 @@ pub fn run() {
                     Target::new(TargetKind::Webview),
                     Target::new(TargetKind::LogDir { file_name: None }),
                 ])
+                .timezone_strategy(TimezoneStrategy::UseLocal)
                 .max_file_size(1024 * 1024) // 1 MB, rotation
                 .level(log::LevelFilter::Trace)
                 .level_for("ort", log::LevelFilter::Warn)
@@ -75,16 +95,14 @@ pub fn run() {
                 .build(),
         )
         .plugin(tauri_plugin_store::Builder::new().build())
-        .plugin(tauri_plugin_cli::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
-            if let Some(cli::CliCommand::Import {
-                file_path,
-                strategy,
-            }) = cli::parse_raw_args(&args)
-            {
-                match cli::import::execute_import(app, &file_path, &strategy) {
+            match cli::parse_raw_args(&args) {
+                Ok(Some(cli::CliCommand::Import {
+                    file_path,
+                    strategy,
+                })) => match cli::import::execute_import(app, &file_path, &strategy) {
                     Ok(msg) => {
                         info!("CLI import (hot-reload): {}", msg);
                         cli::import::apply_hot_reload_side_effects(app);
@@ -92,9 +110,21 @@ pub fn run() {
                     Err(msg) => {
                         error!("CLI import failed: {}", msg);
                     }
+                },
+                Ok(Some(cmd)) => {
+                    info!("CLI dispatch (hot): {:?}", cmd);
+                    crate::shortcuts::cli_dispatch::dispatch(app, &cmd);
                 }
-            } else {
-                show_main_window(app);
+                Ok(None) => {
+                    show_main_window(app);
+                }
+                Err(msg) => {
+                    // Hot path: a live instance must survive a malformed
+                    // external CLI call. Log and show the window so the
+                    // user sees the app instead of nothing happening.
+                    log::error!("{}", msg);
+                    show_main_window(app);
+                }
             }
         }))
         .plugin(
@@ -115,38 +145,50 @@ pub fn run() {
                 }
             }
 
-            // Re-register autostart with --autostart flag for users who enabled it before this update
+            // Re-register autostart with --autostart for users who enabled it before this update.
             if let Ok(true) = app.autolaunch().is_enabled() {
                 let _ = app.autolaunch().enable();
             }
 
-            // Early CLI detection — before heavy initialization
-            if let Some(cli::CliCommand::Import {
-                file_path,
-                strategy,
-            }) = cli::parse_cli_matches(app.handle())
-            {
-                if let Some(main_window) = app.get_webview_window("main") {
-                    let _ = main_window.hide();
-                }
-                match cli::import::execute_import(app.handle(), &file_path, &strategy) {
-                    Ok(msg) => {
-                        println!("{}", msg);
-                        app.handle().exit(0);
+            // Early CLI detection, before heavy initialization.
+            let raw_args: Vec<String> = std::env::args().collect();
+            let pending_cli_action = match cli::parse_raw_args(&raw_args) {
+                Ok(Some(cli::CliCommand::Import {
+                    file_path,
+                    strategy,
+                })) => {
+                    if let Some(main_window) = app.get_webview_window("main") {
+                        let _ = main_window.hide();
                     }
-                    Err(msg) => {
-                        eprintln!("{}", msg);
-                        app.handle().exit(1);
+                    match cli::import::execute_import(app.handle(), &file_path, &strategy) {
+                        Ok(msg) => {
+                            println!("{}", msg);
+                            app.handle().exit(0);
+                        }
+                        Err(msg) => {
+                            eprintln!("{}", msg);
+                            app.handle().exit(1);
+                        }
                     }
+                    return Ok(());
                 }
-                return Ok(());
-            }
+                Ok(Some(cmd)) => Some(cmd),
+                Ok(None) => None,
+                Err(msg) => {
+                    // Cold path: preserve the historical shell contract,
+                    // print to stderr and exit non-zero so scripts detect typos.
+                    eprintln!("{}", msg);
+                    app.handle().exit(1);
+                    return Ok(());
+                }
+            };
 
             let model =
                 Arc::new(Model::new(app.handle().clone()).expect("Failed to initialize model"));
             app.manage(model);
             app.manage(AudioState::new());
             app.manage(WakeWordState::new());
+            app.manage(crate::overlay::overlay::PendingFlashState::default());
 
             let mut s = settings::load_settings(app.handle());
 
@@ -174,15 +216,36 @@ pub fn run() {
             };
             app.manage(Dictionary::new(dictionary.clone()));
             app.manage(HttpApiState::new());
+            app.manage(SmartMicState::new());
+            app.manage(utils::enigo_session::EnigoState::default());
 
             match preload_engine(app.handle()) {
                 Ok(_) => info!("Transcription engine initialized and ready"),
                 Err(e) => info!("Transcription engine will be loaded on first use: {}", e),
             }
 
+            // Open `/dev/uinput` during setup so the first paste does
+            // not race init. The ~500 ms cost is hidden behind model
+            // preload. Emits `wayland-inject-unavailable` on failure.
+            #[cfg(target_os = "linux")]
+            if crate::utils::platform::is_wayland_session() {
+                if let Err(e) = crate::utils::wayland_inject::init() {
+                    warn!("wayland_inject init failed: {}", e);
+                    use tauri::Emitter;
+                    if let Err(err) = app.handle().emit("wayland-inject-unavailable", ()) {
+                        warn!("failed to emit wayland-inject-unavailable event: {}", err);
+                    }
+                }
+                // Char-map failures only degrade Direct paste (falls
+                // back to clipboard+Ctrl+V), they do not block setup.
+                if let Err(e) = crate::utils::wayland_xkb::init_char_map(app.handle()) {
+                    warn!("wayland_xkb init_char_map failed: {}", e);
+                }
+            }
+
             setup_tray(app.handle())?;
 
-            overlay::overlay::create_recording_overlay(app.handle());
+            overlay::overlay::warmup_overlay(app.handle());
             if s.overlay_mode.as_str() == "always" {
                 overlay::overlay::show_recording_overlay(app.handle());
             }
@@ -197,6 +260,21 @@ pub fn run() {
                 let app_handle = app.handle().clone();
                 let state = app_handle.state::<HttpApiState>().inner().clone();
                 crate::http_api::spawn_http_api_thread(app_handle, s.api_port, state);
+            }
+
+            if s.smartmic_enabled {
+                if crate::utils::platform::is_wayland_session() {
+                    info!("Smart Mic disabled on Wayland, skipping server startup.");
+                } else {
+                    let app_handle = app.handle().clone();
+                    let state = app_handle.state::<SmartMicState>().inner().clone();
+                    crate::smartmic::spawn_smartmic_thread(
+                        app_handle,
+                        s.smartmic_port,
+                        state,
+                        Some(std::time::Duration::from_secs(2)),
+                    );
+                }
             }
 
             let app_handle = app.handle().clone();
@@ -221,6 +299,16 @@ pub fn run() {
                 show_main_window(app.handle());
             }
 
+            // Cold-start CLI dispatch: apply the command after init so
+            // the audio/llm pipelines are ready.
+            if let Some(cmd) = pending_cli_action {
+                info!("CLI dispatch (cold start): {:?}", cmd);
+                let app_handle = app.handle().clone();
+                std::thread::spawn(move || {
+                    crate::shortcuts::cli_dispatch::dispatch(&app_handle, &cmd);
+                });
+            }
+
             Ok(())
         })
         .on_window_event(|window, event| {
@@ -236,6 +324,10 @@ pub fn run() {
             write_murmure_file,
             get_all_settings,
             set_show_in_dock,
+            get_linux_session_type,
+            get_linux_distro_info,
+            dismiss_wayland_notice,
+            dismiss_wayland_clipboard_fallback,
             get_dictionary_with_languages,
             get_recent_transcriptions,
             clear_history,
@@ -248,8 +340,6 @@ pub fn run() {
             import_dictionary,
             get_last_transcript_shortcut,
             set_last_transcript_shortcut,
-            get_llm_record_shortcut,
-            set_llm_record_shortcut,
             get_command_shortcut,
             set_command_shortcut,
             get_cancel_shortcut,
@@ -263,6 +353,8 @@ pub fn run() {
             set_llm_mode_3_shortcut,
             get_llm_mode_4_shortcut,
             set_llm_mode_4_shortcut,
+            get_voice_mode_toggle_shortcut,
+            set_voice_mode_toggle_shortcut,
             set_overlay_mode,
             set_overlay_position,
             suspend_transcription,
@@ -275,6 +367,7 @@ pub fn run() {
             stop_http_api_server,
             set_copy_to_clipboard,
             set_paste_method,
+            get_layout_fallback_state,
             get_usage_stats,
             set_persist_history,
             get_current_language,
@@ -318,11 +411,54 @@ pub fn run() {
             set_wake_word_cancel,
             get_wake_word_validate,
             set_wake_word_validate,
+            get_wake_word_submit,
+            set_wake_word_submit,
+            get_silence_timeout_ms,
+            set_silence_timeout_ms,
             get_auto_enter_after_wake_word,
             set_auto_enter_after_wake_word,
-            get_silence_timeout_ms,
-            set_silence_timeout_ms
+            get_smartmic_enabled,
+            set_smartmic_enabled,
+            get_smartmic_port,
+            set_smartmic_port,
+            start_smartmic_server,
+            stop_smartmic_server,
+            get_smartmic_qr_code,
+            get_paired_devices,
+            remove_paired_device,
+            reset_smartmic_tokens,
+            get_smartmic_relay_enabled,
+            set_smartmic_relay_enabled,
+            get_smartmic_relay_url,
+            set_smartmic_relay_url,
+            get_smartmic_machine_id,
+            set_smartmic_machine_id,
+            get_smartmic_machine_id_enabled,
+            set_smartmic_machine_id_enabled,
+            get_smartmic_token_ttl_hours,
+            set_smartmic_token_ttl_hours,
+            get_smartmic_bind_address,
+            set_smartmic_bind_address,
+            list_smartmic_network_interfaces,
+            get_smartmic_hostname,
+            get_streaming_preview,
+            set_streaming_preview,
+            set_overlay_size,
+            set_streaming_text_settings,
+            get_recording_mode,
+            consume_pending_mode_flash,
+            flash_text_in_overlay,
+            hide_overlay_if_idle
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|_app_handle, event| {
+            // Explicit UI_DEV_DESTROY on exit, otherwise the device
+            // lingers under /proc/bus/input/devices until the kernel
+            // reaps us.
+            if matches!(event, tauri::RunEvent::Exit) {
+                #[cfg(target_os = "linux")]
+                crate::utils::wayland_inject::shutdown();
+            }
+        });
 }

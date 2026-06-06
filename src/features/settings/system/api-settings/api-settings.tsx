@@ -18,7 +18,6 @@ export const APISettings = () => {
                     <Typography.Title className="flex items-center gap-2">
                         <Zap className="w-4 h-4 text-muted-foreground" />
                         {t('Local API')}
-                        <code className="text-amber-300 text-[10px]">{t('Experimental')}</code>
                     </Typography.Title>
                     <Typography.Paragraph className="space-y-2">
                         <div>{t('Allows external apps to transcribe .wav files via HTTP.')}</div>
@@ -29,7 +28,7 @@ export const APISettings = () => {
                         <div className="text-xs flex items-center gap-1">
                             <FileCode2 className="w-4 h-4 text-muted-foreground inline-block" />
                             {t('View')}{' '}
-                            <ExternalLink href="https://github.com/Kieirra/murmure/blob/main/docs/API_USAGE.md">
+                            <ExternalLink href="https://github.com/Kieirra/murmure/blob/main/docs/features/api.md">
                                 {t('API documentation')}
                             </ExternalLink>
                         </div>

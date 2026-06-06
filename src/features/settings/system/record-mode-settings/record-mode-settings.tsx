@@ -3,6 +3,7 @@ import { Typography } from '@/components/typography';
 import { Mic } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/select';
 import { useTranslation } from '@/i18n';
+import { useIsWayland } from '@/components/hooks/use-linux-session-type';
 import {
     RecordMode,
     useRecordModeState,
@@ -16,6 +17,7 @@ const SUPPORTED_RECORD_MODE: { key: RecordMode; label: string }[] = [
 export const RecordModeSettings = () => {
     const { t } = useTranslation();
     const { recordMode, setRecordMode } = useRecordModeState();
+    const isWayland = useIsWayland();
 
     return (
         <SettingsUI.Item>
@@ -27,15 +29,23 @@ export const RecordModeSettings = () => {
                 <Typography.Paragraph>{t('Choose how recording is triggered.')}</Typography.Paragraph>
             </SettingsUI.Description>
             <Select value={recordMode} onValueChange={setRecordMode}>
-                <SelectTrigger className="w-[180px]" data-testid="record-mode-select">
+                <SelectTrigger className="w-[260px]" data-testid="record-mode-select">
                     <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                    {SUPPORTED_RECORD_MODE.map((mode) => (
-                        <SelectItem key={mode.key} value={mode.key}>
-                            {t(mode.label)}
-                        </SelectItem>
-                    ))}
+                    {SUPPORTED_RECORD_MODE.map((mode) => {
+                        const isPushToTalkDisabled = isWayland && mode.key === 'push_to_talk';
+                        return (
+                            <SelectItem key={mode.key} value={mode.key} disabled={isPushToTalkDisabled}>
+                                {t(mode.label)}
+                                {isPushToTalkDisabled && (
+                                    <span className="ml-2 text-xs text-muted-foreground">
+                                        {t('Not supported on Wayland')}
+                                    </span>
+                                )}
+                            </SelectItem>
+                        );
+                    })}
                 </SelectContent>
             </Select>
         </SettingsUI.Item>

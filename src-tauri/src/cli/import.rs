@@ -24,6 +24,8 @@ fn category_display_name(key: &str) -> &str {
     match key {
         "settings" => "System Settings",
         "shortcuts" => "Shortcuts",
+        "voice_mode" => "Voice Mode",
+        "smartmic" => "SmartMic",
         "formatting_rules" => "Formatting Rules",
         "llm_connect" => "LLM Connect",
         "dictionary" => "Dictionary",
@@ -60,8 +62,10 @@ pub fn execute_import(
 
     let has_settings = data.categories.settings.is_some();
     let has_shortcuts = data.categories.shortcuts.is_some();
+    let has_voice_mode = data.categories.voice_mode.is_some();
+    let has_smartmic = data.categories.smartmic.is_some();
 
-    if has_settings || has_shortcuts {
+    if has_settings || has_shortcuts || has_voice_mode || has_smartmic {
         let mut current = crate::settings::load_settings(app);
 
         if let Some(ref s) = data.categories.settings {
@@ -77,20 +81,49 @@ pub fn execute_import(
             current.sound_enabled = s.sound_enabled;
             current.log_level = s.log_level.clone();
             current.show_in_dock = s.show_in_dock;
+            current.streaming_preview = s.streaming_preview;
+            current.overlay_size = s.overlay_size.clone();
+            current.streaming_text_width = s.streaming_text_width;
+            current.streaming_font_size = s.streaming_font_size;
+            current.streaming_max_lines = s.streaming_max_lines;
             imported_categories.push("settings");
         }
 
         if let Some(ref sc) = data.categories.shortcuts {
             current.record_shortcut = sc.record_shortcut.clone();
             current.last_transcript_shortcut = sc.last_transcript_shortcut.clone();
-            current.llm_record_shortcut = sc.llm_record_shortcut.clone();
             current.command_shortcut = sc.command_shortcut.clone();
             current.llm_mode_1_shortcut = sc.llm_mode_1_shortcut.clone();
             current.llm_mode_2_shortcut = sc.llm_mode_2_shortcut.clone();
             current.llm_mode_3_shortcut = sc.llm_mode_3_shortcut.clone();
             current.llm_mode_4_shortcut = sc.llm_mode_4_shortcut.clone();
+            current.voice_mode_toggle_shortcut = sc.voice_mode_toggle_shortcut.clone();
             current.cancel_shortcut = sc.cancel_shortcut.clone();
             imported_categories.push("shortcuts");
+        }
+
+        if let Some(ref vm) = data.categories.voice_mode {
+            current.wake_word_enabled = vm.wake_word_enabled;
+            current.wake_word_record = vm.wake_word_record.clone();
+            current.wake_word_command = vm.wake_word_command.clone();
+            current.wake_word_cancel = vm.wake_word_cancel.clone();
+            current.wake_word_validate = vm.wake_word_validate.clone();
+            current.wake_word_submit = vm.wake_word_submit.clone();
+            current.auto_enter_after_wake_word = vm.auto_enter_after_wake_word;
+            current.silence_timeout_ms = vm.silence_timeout_ms;
+            imported_categories.push("voice_mode");
+        }
+
+        if let Some(ref sm) = data.categories.smartmic {
+            current.smartmic_enabled = sm.smartmic_enabled;
+            current.smartmic_port = sm.smartmic_port;
+            current.smartmic_relay_enabled = sm.smartmic_relay_enabled;
+            current.smartmic_relay_url = sm.smartmic_relay_url.clone();
+            current.smartmic_machine_id_enabled = sm.smartmic_machine_id_enabled;
+            current.smartmic_machine_id = sm.smartmic_machine_id.clone();
+            current.smartmic_token_ttl_hours = sm.smartmic_token_ttl_hours;
+            current.smartmic_bind_address = sm.smartmic_bind_address.clone();
+            imported_categories.push("smartmic");
         }
 
         crate::settings::save_settings(app, &current)?;
@@ -111,14 +144,30 @@ pub fn execute_import(
         imported_categories.push("dictionary");
     }
 
-    // Auto-complete onboarding: importing users are already advanced
+    // Wayland onboarding flags are environment-specific (not part of the config payload),
+    // so importing must always re-show those cards. Auto-complete the main onboarding for
+    // returning users who already mastered the app on another machine.
     if !imported_categories.is_empty() {
         let mut s = crate::settings::load_settings(app);
+        let mut dirty = false;
+
+        if s.wayland_notice_dismissed {
+            s.wayland_notice_dismissed = false;
+            dirty = true;
+        }
+        if s.wayland_clipboard_fallback_dismissed {
+            s.wayland_clipboard_fallback_dismissed = false;
+            dirty = true;
+        }
         if !s.onboarding.congrats_dismissed {
             s.onboarding.used_home_shortcut = true;
             s.onboarding.transcribed_outside_app = true;
             s.onboarding.added_dictionary_word = true;
             s.onboarding.congrats_dismissed = true;
+            dirty = true;
+        }
+
+        if dirty {
             let _ = crate::settings::save_settings(app, &s);
         }
     }

@@ -2,7 +2,7 @@ import { buildSubItems } from '../import-export.helpers';
 import { SUB_ITEM_KEY } from '../import-export.constants';
 import { CategoryDefinition, CategorySelection } from '../import-export.types';
 import { FormattingSettings } from '@/features/personalize/formatting-rules/types';
-import { LLMConnectSettings } from '@/features/personalize/llm-connect/hooks/use-llm-connect';
+import { LLMConnectSettings } from '@/features/extensions/llm-connect/hooks/use-llm-connect';
 
 export const getSelectedCategoryKeys = (definitions: CategoryDefinition[], selection: CategorySelection) => {
     return definitions.filter((def) => selection[def.key]?.selected).map((def) => def.key);
@@ -15,6 +15,8 @@ export const buildInitialSelection = (
 ): CategorySelection => ({
     settings: { selected: true, subItems: {} },
     shortcuts: { selected: true, subItems: {} },
+    voice_mode: { selected: true, subItems: {} },
+    smartmic: { selected: true, subItems: {} },
     formatting_rules: {
         selected: true,
         subItems: buildSubItems(

@@ -1,8 +1,9 @@
 [package]
 name = "murmure"
-version = "1.8.0"
+version = "1.9.0"
 description = "Privacy-first speech-to-text, running entirely on your machine"
 authors = ["al1x-ai.com"]
+license = "AGPL-3.0-or-later"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -20,7 +21,6 @@ tauri-build = { version = "2", features = [] }
 [dependencies]
 tauri = { version = "2", features = ["tray-icon", "image-png", "macos-private-api"] }
 tauri-plugin-opener = "2"
-tauri-plugin-cli = "2"
 tauri-plugin-clipboard-manager = "2"
 tauri-plugin-single-instance = "2"
 serde = { version = "1.0.228", features = ["derive"] }
@@ -41,9 +41,9 @@ thiserror = "2.0.18"
 log = "0.4.29"
 enigo = "0.6"
 rphonetic = "3.0.6"
-tokio = { version = "1", features = ["full"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "time", "sync", "net"] }
 text2num = "2.6.2"
-axum = { version = "0.8", features = ["multipart"] }
+axum = { version = "0.8", features = ["multipart", "ws"] }
 hyper = "1"
 uuid = { version = "1", features = ["v4"] }
 tauri-plugin-dialog = "~2.6"
@@ -54,6 +54,16 @@ unicode-normalization = "0.1"
 strsim = "0.11"
 keyring = { version = "3", features = ["apple-native", "windows-native", "sync-secret-service"] }
 url = "2"
+qrcode = "0.14"
+rcgen = "0.13"
+time = "0.3"
+rustls = { version = "0.23", features = ["ring"] }
+axum-server = { version = "0.7", features = ["tls-rustls"] }
+socket2 = "0.6"
+local-ip-address = "0.6"
+base64 = "0.22"
+hostname = "0.4"
+rubato = "3.0.0"
 
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 tauri-plugin-autostart = "2"
@@ -61,11 +71,29 @@ tauri-plugin-updater = "2"
 tauri-plugin-process = "2"
 parking_lot = "0.12"
 
-# rdev is used for keyboard event capture on Linux and macOS
-# Using fufesou fork which fixes macOS crash issues with rdev 0.5
-# Note: official rdev 0.5 crashes on macOS (see https://github.com/tauri-apps/tauri/discussions/7839)
-[target.'cfg(any(target_os = "linux", target_os = "macos"))'.dependencies]
+# rdev (fufesou fork): keyboard capture on Linux X11, F13-F20 key support.
+[target.'cfg(target_os = "linux")'.dependencies]
 rdev = { git = "https://github.com/fufesou/rdev" }
+# Direct `/dev/uinput` virtual keyboard for Wayland keystroke injection.
+# Wayland forbids inter-client input injection by design; uinput
+# bypasses it at the kernel level and works on every compositor (KWin,
+# Mutter, wlroots). See `src/utils/wayland_inject.rs` for the rationale.
+input-linux = "0.7"
+# libloading: runtime dlopen of libgtk-layer-shell.so.0 so the binary
+# does not carry a hard DT_NEEDED. Lets the .deb install on systems
+# without libgtk-layer-shell0 (Ubuntu/GNOME) and falls back to the
+# native Tauri overlay positioning.
+libloading = "0.8"
+# gtk + glib: needed to convert tauri::WebviewWindow::gtk_window() into
+# a raw *mut GtkWindow pointer passed to the dlopen'd symbols. These
+# crates are already transitively present via tauri.
+gtk = "0.18"
+glib = "0.18"
+# Rust binding to libxkbcommon, used to compile a keymap for the active
+# layout and build a char -> (evdev_keycode, needs_shift) table for the
+# Direct paste mode. libxkbcommon is ubiquitous on Wayland systems so
+# no extra packaging dependency is required.
+xkbcommon = "0.9"
 
 # Core Foundation for macOS keyboard layout handling (AZERTY/QWERTY conversion)
 [target.'cfg(target_os = "macos")'.dependencies]
@@ -74,3 +102,9 @@ core-foundation-sys = "0.8"
 
 [target.'cfg(target_os = "windows")'.dependencies]
 windows-sys = { version = "0.61", features = ["Win32_UI_Input_KeyboardAndMouse", "Win32_System_Console"] }
+
+# panic = "abort" deliberately omitted, changes thread-panic behaviour.
+[profile.release]
+lto = "fat"
+codegen-units = 1
+strip = "symbols"

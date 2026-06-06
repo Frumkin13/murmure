@@ -49,11 +49,6 @@ export const SHORTCUT_CONFIGS = {
         getCommand: 'get_last_transcript_shortcut',
         setCommand: 'set_last_transcript_shortcut',
     },
-    llm: {
-        defaultShortcut: 'ctrl+alt+space',
-        getCommand: 'get_llm_record_shortcut',
-        setCommand: 'set_llm_record_shortcut',
-    },
     command: {
         defaultShortcut: 'ctrl+shift+x',
         getCommand: 'get_command_shortcut',
@@ -85,8 +80,13 @@ export const SHORTCUT_CONFIGS = {
         setCommand: 'set_llm_mode_4_shortcut',
     },
     cancel: {
-        defaultShortcut: 'escape',
+        defaultShortcut: 'ctrl+backspace',
         getCommand: 'get_cancel_shortcut',
         setCommand: 'set_cancel_shortcut',
+    },
+    voiceModeToggle: {
+        defaultShortcut: 'ctrl+shift+0',
+        getCommand: 'get_voice_mode_toggle_shortcut',
+        setCommand: 'set_voice_mode_toggle_shortcut',
     },
 };

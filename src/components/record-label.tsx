@@ -3,11 +3,18 @@ import { Typography } from '@/components/typography.tsx';
 import { useTranslation } from '@/i18n';
 import { useRecordModeState } from '@/features/settings/system/record-mode-settings/hooks/use-record-mode-state.ts';
 import { useShortcut, SHORTCUT_CONFIGS } from '@/features/settings/shortcuts/hooks/use-shortcut.ts';
+import { useIsWayland } from '@/components/hooks/use-linux-session-type';
 
 export const RecordLabel = () => {
+    const isWayland = useIsWayland();
+
     const { recordMode } = useRecordModeState();
     const { shortcut: recordShortcut } = useShortcut(SHORTCUT_CONFIGS.record);
     const { t } = useTranslation();
+
+    if (isWayland) {
+        return null;
+    }
 
     return (
         <Typography.Paragraph className="text-xs absolute bottom-2 left-2">

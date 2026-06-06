@@ -2,28 +2,9 @@
 
 A privacy-first, open-source speech-to-text application that runs entirely on your machine, powered by a neural network via NVIDIA’s [Parakeet TDT 0.6B v3 model](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3) for fast, local transcription. Murmure turns your voice into text with no internet connection and zero data collection, and supports 25 European languages.
 
-Learn more on the [official website](https://murmure.al1x-ai.com/).
+Learn more on the [official website](https://murmure.al1x-ai.com/) | [Documentation](https://docs.murmure.app)
 
 ![demo](public/murmure-screenshot-beautiful.png)
-
-## Table of Contents
-
-- [Features](#features)
-- [Usage](#usage)
-- [Installation](#installation)
-    - [Windows (Official)](#windows-official)
-    - [Linux (Official)](#linux-official)
-    - [MacOS (Official)](#macos-official)
-    - [MacOS - Intel (Official)](#macos---intel-official)
-- [CLI Import (1.8.0)](#cli-import-180)
-- [Changelog](#changelog)
-- [🗺️ Roadmap](#️-roadmap)
-- [Contributing](#contributing)
-- [Privacy Policy](#privacy-policy)
-- [Sponsors](#sponsors)
-- [Support Development](#support-development)
-- [License](#license)
-- [Acknowledgments](#acknowledgments)
 
 ## Features
 
@@ -56,6 +37,9 @@ Because all computation is local, no network connection is required.
 
 ### Windows (Official)
 
+> [!IMPORTANT]
+> Murmure requires **Windows 10 or later**. Older versions (such as Windows 8.1) are not supported and may result in missing system libraries (e.g. `dxcore.dll`).
+
 Multiple installation methods are available:
 
 - Using a `.msi` or `setup.exe` file:
@@ -73,8 +57,13 @@ Multiple installation methods are available:
 
 ### Linux (Official)
 
+> [!NOTE]
+> **Wayland**: Two shortcut modes are available. KDE Plasma 6, Hyprland, and Sway use the `xdg-desktop-portal` GlobalShortcuts portal with no manual setup. GNOME defaults to CLI mode: you must configure a custom OS shortcut before using Murmure, and Push-to-talk is not available. See the [Linux installation guide](https://docs.murmure.app/getting-started/linux/) and the [shortcut configuration guide](https://docs.murmure.app/configure-shortcuts-on-linux/).
+
 Multiple installation methods are available:
+
 - Quick install via terminal (Debian-based distributions):
+
     ```sh
     curl -fsSL https://raw.githubusercontent.com/Kieirra/murmure/main/install.sh | sh
     ```
@@ -87,11 +76,6 @@ Multiple installation methods are available:
     1. Download `Murmure_amd64.AppImage` from the [release](https://github.com/Kieirra/murmure/releases) page.
     2. Make it executable: `chmod +x Murmure_amd64.AppImage`
     3. Run the AppImage.
-
-> [!IMPORTANT]
-> Murmure currently has limited support on Wayland-based distributions (except Fedora, which can fall back to X11 for some apps).  
-> This appears to be related to Wayland’s sandbox restrictions for AppImages, the global shortcut to start recording will not work in this environment.  
-> No workaround is available yet. See #28
 
 ### MacOS (Official)
 
@@ -120,48 +104,11 @@ it should work. It's a bit painful but you will not do it again with the next ve
 3. Murmure should ask for permissions to access your microphone and accessibility.
 4. Restart Murmure for the permissions to take effect.
 
-> [!IMPORTANT]
-> **Updating Murmure on macOS from 1.6.0:** If you experience issues with Murmure and the shortcuts are not working, please do this exactly in this order, (and "Remove" means not only un-toggling but really removing completely Murmure from the list) :
-
-1. Remove Murmure from System Settings → Privacy & Security → Accessibility.
-2. Remove Murmure from System Settings → Privacy & Security → Input monitoring.
-3. Install the last version
-4. Launch Murmure.
-5. Re-grant the Accessibility
-6. Re-grant the Input monitoring permission
-7. Restart Murmure.
-
-it should work. It's a bit painful but you will not do it again with the next version, it's because 1.6.0 have the same name but is not detected as the same application... so macos is lost.
+The same upgrade note from 1.6.0 applies. See the MacOS section above.
 
 ## CLI Import (1.8.0)
 
-> [!NOTE]
-> This feature is available starting from version **1.8.0**.
-
-Murmure supports importing a `.murmure` configuration file via the command line, useful for sysadmin mass deployment or sharing settings across machines.
-
-**Linux:**
-```sh
-murmure import config.murmure
-```
-
-**macOS:**
-```sh
-/Applications/murmure.app/Contents/MacOS/murmure import config.murmure
-```
-
-**Windows:**
-```powershell
-murmure.exe import config.murmure
-```
-
-You can also specify an import strategy (`replace` by default, or `merge` to keep existing settings and add new ones):
-
-```sh
-murmure import config.murmure --strategy merge
-```
-
-For more details, run `murmure import --help`.
+Murmure supports importing a `.murmure` configuration file via the command line (`murmure import config.murmure`), useful for mass deployment or sharing settings across machines. A `--strategy merge` option is available to keep existing settings. See the [CLI documentation](https://docs.murmure.app/features/cli/) for details.
 
 ## Changelog
 
@@ -169,24 +116,27 @@ See [CHANGELOG.md](./CHANGELOG.md).
 
 ## 🗺️ Roadmap
 
-- [x] (1.8.1) fix(sidebar): Remove Ctrl+B shortcut that could hide sidebar https://github.com/Kieirra/murmure/issues/266
-- [ ] (1.8.1) fix(shortcuts): Ctrl+Space & other shortcuts not working on macOS https://github.com/Kieirra/murmure/issues/274
-- [x] (1.8.1) fix(audio): Virtual microphones not listed (e.g. Nvidia Broadcast) https://github.com/Kieirra/murmure/issues/164
-- [x] (1.8.1) fix(voice-mode): Add beta tag and CPU usage warning
-- [x] (1.8.1) chore(deps): Security updates for dependencies
-- [ ] feat(shortcuts): using delete should remove shortcuts
-- [ ] fix(shortcuts): Do not allow adding duplicate shortcuts
-- [ ] feat(dictionary): Virtualize dictionary to handle large dictionaries
-- [ ] feat(llm): Automatically detect Ollama at first LLM Connect tutorial.
-- [ ] feat(overlay): Configure overlay size
-- [ ] feat(overlay): Allow dragging the overlay to change its position https://github.com/Kieirra/murmure/issues/64
-- [ ] feat(dictionary): Improve detection https://github.com/Kieirra/murmure/issues/44
-- [ ] fix(visualizer): Adjust sensitivity (dynamic or lower)
-- [ ] fix(visualizer): Visualizer does not always reset at the end of a transcription
-- [ ] refactor(settings): Secure settings persistence (migrate to tauri-plugin-store for atomic writes)
-- [ ] feat(shortcuts): Add a shortcut to automatically add a selected word to the dictionary (copy selection → read word → add to dictionary)
-- [ ] (under consideration) feat(advanced): Audio pre-prompt https://github.com/Kieirra/murmure/issues/75
-- [ ] (under consideration) feat(webhook): Send an HTTP request after `CTRL + SPACE` (opens up many interesting possibilities)
+### Backlog
+- [x] (1.10.0) feat(audio): Improve transcription accuracy with higher quality audio resampling, especially on low-end microphones
+- [ ] (1.10.0) feat(dictionary): Improve dictionary accuracy via Parakeet phrase boosting https://github.com/Kieirra/murmure/issues/338
+- [ ] (1.10.0) feat(audio) Optimizing parakeet onnx to better result
+- [ ] (1.10.0) feat(audio): Lower output volume while recording https://github.com/Kieirra/murmure/issues/364
+- [ ] (1.10.0) feat(shortcuts): Delete key removes the selected shortcut
+- [ ] (1.10.0) fix(shortcuts): Prevent adding a duplicate shortcut
+- [ ] (1.10.0) feat(overlay): Close button to cancel an ongoing transcription https://github.com/Kieirra/murmure/discussions/305#discussioncomment-16928389
+- [ ] (1.10.0) feat(insert): None option for Text Insert Mode to disable auto-insertion https://github.com/Kieirra/murmure/issues/349
+- [ ] (1.10.0) feat(overlay): Countdown timer shown in the last minute before the recording limit https://github.com/Kieirra/murmure/issues/359
+- [ ] (1.10.0) feat(dictation): Long dictation mode (VAD) that writes on silence to bypass the 5-minute limit https://github.com/Kieirra/murmure/issues/359
+- [ ] (1.10.0) fix(api): Remove the experimental tag and consolidate the API
+- [ ] (1.10.0) fix(api): Implement LLM Connect service
+- [ ] (1.10.0) fix(visualizer): Always reset the visualizer at the end of a transcription
+- [ ] (1.10.0) feat(llm): Built-in prompt preset for input anonymisation
+- [ ] (1.10.0) fix(onboarding): Improve UI onboarding non-wayland
+- [ ] (1.10.0) feat(dictionary): Virtualize the list to handle large dictionaries
+- [ ] (1.10.0) (under consideration) fix(audio): Band-limited resampling with anti-aliasing low-pass filter to improve transcription quality on non-16kHz mics
+- [ ] (under consideration) (1.10.0) fix(api): Auto-split long audio for LLM transcription
+- [ ] (under consideration) (1.10.0) feat(draft): Draft Mode to review and edit a transcription before writing (medical use case)
+- [ ] (under consideration) feat(llm): Auto-detect Ollama on first LLM Connect setup
 
 ## Contributing
 

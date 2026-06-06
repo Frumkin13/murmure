@@ -12,9 +12,15 @@ import {
     ExportedCategories,
     AppSettings,
 } from '../../import-export.types';
-import { extractSystemSettings, extractShortcuts, extractLlmConnect } from '../../import-export.helpers';
+import {
+    extractSystemSettings,
+    extractShortcuts,
+    extractVoiceMode,
+    extractSmartMic,
+    extractLlmConnect,
+} from '../../import-export.helpers';
 import { FormattingSettings } from '@/features/personalize/formatting-rules/types';
-import { LLMConnectSettings } from '@/features/personalize/llm-connect/hooks/use-llm-connect';
+import { LLMConnectSettings } from '@/features/extensions/llm-connect/hooks/use-llm-connect';
 
 interface PreloadedData {
     allSettings: AppSettings | null;
@@ -57,6 +63,14 @@ export const useExport = () => {
                 categories.shortcuts = extractShortcuts(allSettings);
             }
 
+            if (selectedCategories.includes('voice_mode')) {
+                categories.voice_mode = extractVoiceMode(allSettings);
+            }
+
+            if (selectedCategories.includes('smartmic')) {
+                categories.smartmic = extractSmartMic(allSettings);
+            }
+
             if (selectedCategories.includes('formatting_rules')) {
                 fetchPromises.push(
                     invoke<FormattingSettings>('get_formatting_settings').then((data) => {
@@ -97,9 +111,7 @@ export const useExport = () => {
                             remote_privacy_acknowledged: includeConnection
                                 ? full.remote_privacy_acknowledged
                                 : undefined,
-                            onboarding_completed: includeConnection
-                                ? full.onboarding_completed
-                                : undefined,
+                            onboarding_completed: includeConnection ? full.onboarding_completed : undefined,
                             modes: filteredModes,
                         };
                     })

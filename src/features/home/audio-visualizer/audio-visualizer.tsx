@@ -4,6 +4,8 @@ import { useLLMState } from './hooks/use-llm-state';
 import clsx from 'clsx';
 import { AudioPixel } from './audio-pixel/audio-pixel';
 
+import type { ColorScheme } from './audio-pixel/audio-pixel.helpers';
+
 interface AudioVisualizerProps {
     bars?: number;
     rows?: number;
@@ -11,6 +13,9 @@ interface AudioVisualizerProps {
     audioPixelHeight?: number;
     pixelHeight?: number;
     className?: string;
+    level?: number;
+    isProcessing?: boolean;
+    colorScheme?: ColorScheme;
 }
 
 export const AudioVisualizer = ({
@@ -19,9 +24,14 @@ export const AudioVisualizer = ({
     audioPixelWidth = 12,
     audioPixelHeight = 6,
     className,
+    level: levelProp,
+    isProcessing: isProcessingProp,
+    colorScheme,
 }: AudioVisualizerProps) => {
-    const { level } = useLevelState();
-    const { isProcessing } = useLLMState();
+    const hookLevel = useLevelState();
+    const hookLLM = useLLMState();
+    const effectiveLevel = levelProp ?? hookLevel.level;
+    const effectiveIsProcessing = isProcessingProp ?? hookLLM.isProcessing;
     const rafRef = useRef<number | null>(null);
     const [displayed, setDisplayed] = useState(0);
     const [wavePhase, setWavePhase] = useState(0);
@@ -31,11 +41,11 @@ export const AudioVisualizer = ({
         const tick = () => {
             if (!running) return;
             let needsNextFrame = true;
-            if (isProcessing) {
+            if (effectiveIsProcessing) {
                 setWavePhase((p) => (p + 0.08) % (Math.PI * 2));
             } else {
                 setDisplayed((current) => {
-                    const diff = level - current;
+                    const diff = effectiveLevel - current;
                     if (Math.abs(diff) < 0.001) {
                         needsNextFrame = false;
                         return current;
@@ -53,10 +63,10 @@ export const AudioVisualizer = ({
             running = false;
             if (rafRef.current) cancelAnimationFrame(rafRef.current);
         };
-    }, [level, isProcessing]);
+    }, [effectiveLevel, effectiveIsProcessing]);
 
     const heights = useMemo(() => {
-        if (isProcessing) {
+        if (effectiveIsProcessing) {
             const arr: number[] = [];
             const sigma = bars / 4; // Width of the wave proportional to bars
             for (let i = 0; i < bars; i++) {
@@ -69,7 +79,7 @@ export const AudioVisualizer = ({
             return arr;
         }
 
-        const v = Math.min(1, displayed * 10);
+        const v = Math.min(1, Math.sqrt(displayed) * 2.5);
         const arr: number[] = [];
         for (let i = 0; i < bars; i++) {
             const bias = Math.abs((i / (bars - 1)) * 2 - 1);
@@ -77,7 +87,7 @@ export const AudioVisualizer = ({
             arr.push(h);
         }
         return arr;
-    }, [bars, isProcessing, wavePhase, displayed]);
+    }, [bars, effectiveIsProcessing, wavePhase, displayed]);
 
     return (
         <div className={clsx('flex gap-0.5 w-full', className)}>
@@ -106,6 +116,7 @@ export const AudioVisualizer = ({
                                     hasSound={hasSound}
                                     width={audioPixelWidth}
                                     height={audioPixelHeight}
+                                    colorScheme={colorScheme}
                                 />
                             );
                         })}

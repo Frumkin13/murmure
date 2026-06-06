@@ -13,14 +13,22 @@ use std::path::Path;
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter, Manager};
 
-pub fn process_recording(app: &AppHandle, file_path: &Path) -> Result<String> {
+pub struct ProcessingResult {
+    pub text: String,
+    pub llm_error: Option<String>,
+}
+
+pub fn process_recording(app: &AppHandle, file_path: &Path) -> Result<ProcessingResult> {
     // 1. Transcribe
     let raw_text = transcribe_audio(app, file_path)?;
     debug!("Raw transcription: {}", raw_text);
 
     if raw_text.trim().is_empty() {
         debug!("Transcription is empty, skipping further processing.");
-        return Ok(raw_text);
+        return Ok(ProcessingResult {
+            text: raw_text,
+            llm_error: None,
+        });
     }
 
     // 2. Deduplicate repeated words (transcription artifact cleanup)
@@ -31,7 +39,9 @@ pub fn process_recording(app: &AppHandle, file_path: &Path) -> Result<String> {
     debug!("Transcription fixed with dictionary: {}", text);
 
     // 4. LLM Post-processing
-    let llm_text = apply_llm_processing(app, text)?;
+    let state = app.state::<AudioState>();
+    let (llm_text, llm_error) =
+        apply_llm_processing_with_error(app, text, state.get_recording_mode())?;
 
     // 5. Apply formatting rules
     let final_text = apply_formatting_rules(app, llm_text);
@@ -40,32 +50,17 @@ pub fn process_recording(app: &AppHandle, file_path: &Path) -> Result<String> {
     // 6. Save Stats & History
     save_stats_and_history(app, file_path, &final_text)?;
 
-    Ok(final_text)
+    Ok(ProcessingResult {
+        text: final_text,
+        llm_error,
+    })
 }
 
 pub fn transcribe_audio(app: &AppHandle, audio_path: &Path) -> Result<String> {
     let _ = app.emit("llm-processing-start", ());
 
     let state = app.state::<AudioState>();
-
-    // Ensure engine is loaded
-    {
-        let mut engine_guard = state.engine.lock();
-        if engine_guard.is_none() {
-            let model = app.state::<Arc<Model>>();
-            let model_path = model
-                .get_model_path()
-                .map_err(|e| anyhow::anyhow!("Failed to get model path: {}", e))?;
-
-            let mut new_engine = crate::engine::ParakeetEngine::new();
-            new_engine
-                .load_model_with_params(&model_path, ParakeetModelParams::int8())
-                .map_err(|e| anyhow::anyhow!("Failed to load model: {}", e))?;
-
-            *engine_guard = Some(new_engine);
-            info!("Model loaded and cached in memory");
-        }
-    }
+    ensure_engine_loaded(app, &state)?;
 
     let samples = read_wav_samples(audio_path)?;
 
@@ -89,26 +84,21 @@ fn apply_dictionary_and_rules(app: &AppHandle, text: String) -> Result<String> {
 
     Ok(fix_transcription_with_dictionary(
         text,
-        dictionary,
-        cc_rules_path,
+        &dictionary,
+        &cc_rules_path,
     ))
 }
 
-fn apply_llm_processing(app: &AppHandle, text: String) -> Result<String> {
-    let state = app.state::<AudioState>();
-    let recording_mode = state.get_recording_mode();
-
-    let rt = tokio::runtime::Runtime::new().context("Failed to create tokio runtime")?;
-
-    match recording_mode {
+fn apply_llm_processing_with_error(
+    app: &AppHandle,
+    text: String,
+    mode: RecordingMode,
+) -> Result<(String, Option<String>)> {
+    match mode {
         RecordingMode::Command => {
             debug!("Processing audio in Command mode");
-
             let selected_text = match crate::clipboard::get_selected_text(app) {
-                Ok(s) if !s.trim().is_empty() => {
-                    debug!("Captured selected text for command mode successfully");
-                    Some(s)
-                }
+                Ok(s) if !s.trim().is_empty() => Some(s),
                 Ok(_) => {
                     warn!("Selected text was empty in command mode");
                     None
@@ -118,7 +108,6 @@ fn apply_llm_processing(app: &AppHandle, text: String) -> Result<String> {
                     None
                 }
             };
-
             let system_prompt = format!(
                 r#"You are a text transformation tool, not a conversational assistant.
 Your ONLY job: apply the user instruction to the input text and return the result.
@@ -133,56 +122,49 @@ Rules:
 User instruction: {}"#,
                 text
             );
-
-            let user_prompt = match &selected_text {
-                Some(s) => s.clone(),
-                None => text.clone(),
-            };
-
-            match rt.block_on(crate::llm::process_command_with_llm(
+            let user_prompt = selected_text.unwrap_or_else(|| text.clone());
+            match tauri::async_runtime::block_on(crate::llm::process_command_with_llm(
                 app,
                 system_prompt,
                 user_prompt,
             )) {
-                Ok(response) => {
-                    debug!("Command processed with LLM: {}", response);
-                    Ok(response)
-                }
+                Ok(response) => Ok((response, None)),
                 Err(e) => {
                     warn!(
                         "Command LLM processing failed: {}. Using original transcription.",
                         e
                     );
-                    let _ = app.emit("llm-error", e.to_string());
-                    Ok(text)
+                    Ok((text, Some(e.to_string())))
                 }
             }
         }
         RecordingMode::Llm => {
-            match rt.block_on(crate::llm::post_process_with_llm(
+            match tauri::async_runtime::block_on(crate::llm::post_process_with_llm(
                 app,
                 text.clone(),
-                false, // force_bypass
+                false,
             )) {
-                Ok(llm_text) => {
-                    debug!("Transcription post-processed with LLM: {}", llm_text);
-                    Ok(llm_text)
-                }
+                Ok(llm_text) => Ok((llm_text, None)),
                 Err(e) => {
                     warn!(
                         "LLM post-processing failed: {}. Using original transcription.",
                         e
                     );
-                    let _ = app.emit("llm-error", e.to_string());
-                    Ok(text)
+                    Ok((text, Some(e.to_string())))
                 }
             }
         }
-        RecordingMode::Standard => {
-            // Standard mode bypasses LLM processing
-            Ok(text)
-        }
+        RecordingMode::Standard => Ok((text, None)),
     }
+}
+
+fn apply_llm_processing_with_mode(
+    app: &AppHandle,
+    text: String,
+    mode: RecordingMode,
+) -> Result<String> {
+    let (result, _) = apply_llm_processing_with_error(app, text, mode)?;
+    Ok(result)
 }
 
 fn apply_formatting_rules(app: &AppHandle, text: String) -> String {
@@ -256,6 +238,75 @@ fn save_stats_and_history(app: &AppHandle, file_path: &Path, text: &str) -> Resu
         error!("Failed to save stats session: {}", e);
     }
 
+    Ok(())
+}
+
+/// Process a recording from raw samples (no WAV file), used by SmartMic.
+/// Bypasses file I/O and enters the pipeline directly from PCM samples.
+pub fn process_recording_from_samples(
+    app: &AppHandle,
+    samples: Vec<f32>,
+    mode: RecordingMode,
+) -> Result<String> {
+    // 1. Transcribe directly from samples
+    let raw_text = transcribe_samples_direct(app, samples)?;
+
+    if raw_text.trim().is_empty() {
+        return Ok(raw_text);
+    }
+
+    // 2. Deduplicate repeated words
+    let text = deduplicate_repeated_words(&raw_text);
+
+    // 3. Dictionary & CC Rules
+    let text = apply_dictionary_and_rules(app, text)?;
+
+    // 4. LLM post-processing (pass mode directly, no global state mutation)
+    let llm_text = apply_llm_processing_with_mode(app, text, mode)?;
+
+    // 5. Formatting rules
+    let final_text = apply_formatting_rules(app, llm_text);
+
+    // Note: No save_stats_and_history (no WAV file, no duration)
+    Ok(final_text)
+}
+
+fn transcribe_samples_direct(app: &AppHandle, samples: Vec<f32>) -> Result<String> {
+    let _ = app.emit("llm-processing-start", ());
+    let state = app.state::<AudioState>();
+    ensure_engine_loaded(app, &state)?;
+
+    let mut engine_guard = state.engine.lock();
+    let engine = engine_guard
+        .as_mut()
+        .ok_or_else(|| anyhow::anyhow!("Engine not loaded"))?;
+
+    let result = engine.transcribe_samples(samples, None).map_err(|e| {
+        let _ = app.emit("llm-processing-end", ());
+        anyhow::anyhow!("Transcription failed: {}", e)
+    })?;
+    let _ = app.emit("llm-processing-end", ());
+
+    Ok(result.text)
+}
+
+/// Load the transcription engine into the AudioState if not already loaded.
+fn ensure_engine_loaded(app: &AppHandle, state: &AudioState) -> Result<()> {
+    let mut engine_guard = state.engine.lock();
+    if engine_guard.is_none() {
+        let model = app.state::<Arc<Model>>();
+        let model_path = model
+            .get_model_path()
+            .map_err(|e| anyhow::anyhow!("Failed to get model path: {}", e))?;
+
+        let mut new_engine = crate::engine::ParakeetEngine::new();
+        new_engine
+            .load_model_with_params(&model_path, ParakeetModelParams::int8())
+            .map_err(|e| anyhow::anyhow!("Failed to load model: {}", e))?;
+
+        *engine_guard = Some(new_engine);
+        info!("Model loaded and cached in memory");
+    }
     Ok(())
 }
 

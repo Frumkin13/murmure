@@ -3,7 +3,9 @@ import { Typography } from '@/components/typography';
 import { ClipboardPaste } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/select';
 import { useTranslation } from '@/i18n';
+import { useIsWayland } from '@/components/hooks/use-linux-session-type';
 import { PasteMethod, usePasteMethodState } from './hooks/use-paste-method-state';
+import { useLayoutFallback } from './hooks/use-layout-fallback';
 
 const PASTE_METHODS: { key: PasteMethod; label: string }[] = [
     { key: 'ctrl_v', label: 'Standard (Ctrl+V)' },
@@ -14,6 +16,10 @@ const PASTE_METHODS: { key: PasteMethod; label: string }[] = [
 export const PasteMethodSettings = () => {
     const { t } = useTranslation();
     const { pasteMethod, setPasteMethod } = usePasteMethodState();
+    const isWayland = useIsWayland();
+    const { isFallback } = useLayoutFallback();
+
+    const showFallbackBadge = isWayland && pasteMethod === 'direct' && isFallback;
 
     return (
         <SettingsUI.Item>
@@ -41,17 +47,34 @@ export const PasteMethodSettings = () => {
                         </li>
                     </ul>
                 </Typography.Paragraph>
+                {showFallbackBadge ? (
+                    <p className="text-xs text-yellow-400">
+                        {t(
+                            'Keyboard layout could not be detected. To avoid mistyped characters, switch back to Ctrl+V.'
+                        )}
+                    </p>
+                ) : null}
             </SettingsUI.Description>
             <Select value={pasteMethod} onValueChange={setPasteMethod}>
                 <SelectTrigger className="w-[200px]" data-testid="paste-method-select">
                     <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                    {PASTE_METHODS.map((method) => (
-                        <SelectItem key={method.key} value={method.key}>
-                            {t(method.label)}
-                        </SelectItem>
-                    ))}
+                    {PASTE_METHODS.map((method) => {
+                        // Direct under Wayland is flagged experimental
+                        // until we have wider compositor coverage.
+                        const isExperimental = isWayland && method.key === 'direct';
+                        return (
+                            <SelectItem key={method.key} value={method.key}>
+                                {t(method.label)}
+                                {isExperimental ? (
+                                    <span className="ml-2 text-xs text-yellow-400">
+                                        ({t('Experimental')})
+                                    </span>
+                                ) : null}
+                            </SelectItem>
+                        );
+                    })}
                 </SelectContent>
             </Select>
         </SettingsUI.Item>

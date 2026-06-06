@@ -4,9 +4,52 @@ use crate::shortcuts::types::{
     recording_state, ActivationMode, KeyEventType, RecordingSource, ShortcutAction,
     ShortcutRegistry, ShortcutState,
 };
-use log::info;
-use std::time::Duration;
-use tauri::{AppHandle, Manager};
+use log::{info, warn};
+use parking_lot::Mutex;
+use std::time::{Duration, Instant};
+use tauri::{AppHandle, Emitter, Manager};
+
+const SHORTCUT_COOLDOWN: Duration = Duration::from_millis(250);
+
+fn within_cooldown(last: &Mutex<Instant>) -> bool {
+    last.lock().elapsed() < SHORTCUT_COOLDOWN
+}
+
+pub(crate) fn is_llm_mode_configured(app: &AppHandle, index: usize) -> bool {
+    crate::llm::helpers::load_llm_connect_settings(app)
+        .modes
+        .get(index)
+        .is_some_and(|m| !m.prompt.trim().is_empty())
+}
+
+/// Verifie qu'un mode LLM est utilisable (LLM Connect active + prompt configure).
+/// Retourne Ok(()) si pret, Err(()) sinon. Emet `llm-mode-not-configured`
+/// uniquement si le mode existe sans prompt et si `emit_not_configured` est vrai
+/// (le clavier passe false sur Release pour eviter le double-fire press+release).
+pub(crate) fn ensure_llm_mode_ready(
+    app: &AppHandle,
+    index: usize,
+    emit_not_configured: bool,
+) -> Result<(), ()> {
+    if !crate::llm::helpers::is_llm_connect_enabled(app) {
+        warn!("LLM Connect disabled: llm-mode {} ignored", index + 1);
+        return Err(());
+    }
+    if !is_llm_mode_configured(app, index) {
+        if emit_not_configured {
+            warn!(
+                "LLM mode {} not configured, emitting llm-mode-not-configured",
+                index + 1
+            );
+            let _ = app.emit(
+                "llm-mode-not-configured",
+                serde_json::json!({ "mode": index + 1 }),
+            );
+        }
+        return Err(());
+    }
+    Ok(())
+}
 
 pub fn handle_shortcut_event(
     app: &AppHandle,
@@ -18,33 +61,25 @@ pub fn handle_shortcut_event(
 
     match action {
         ShortcutAction::StartRecording => {
+            let app_for_fn = app.clone();
             handle_recording_event(
                 app,
                 RecordingSource::Standard,
                 mode,
                 event_type,
                 &shortcut_state,
-                || crate::audio::record_audio(app, RecordingMode::Standard),
-            );
-        }
-        ShortcutAction::StartRecordingLLM => {
-            handle_recording_event(
-                app,
-                RecordingSource::Llm,
-                mode,
-                event_type,
-                &shortcut_state,
-                || crate::audio::record_audio(app, RecordingMode::Llm),
+                move || crate::audio::record_audio(&app_for_fn, RecordingMode::Standard),
             );
         }
         ShortcutAction::StartRecordingCommand => {
+            let app_for_fn = app.clone();
             handle_recording_event(
                 app,
                 RecordingSource::Command,
                 mode,
                 event_type,
                 &shortcut_state,
-                || crate::audio::record_audio(app, RecordingMode::Command),
+                move || crate::audio::record_audio(&app_for_fn, RecordingMode::Command),
             );
         }
         ShortcutAction::PasteLastTranscript => {
@@ -54,15 +89,20 @@ pub fn handle_shortcut_event(
                 }
             }
         }
-        ShortcutAction::SwitchLLMMode(index) => {
-            if event_type == KeyEventType::Pressed {
-                let mut last_switch = recording_state().last_mode_switch.lock();
-                if last_switch.elapsed() > Duration::from_millis(300) {
-                    crate::llm::switch_active_mode(app, *index);
-                    *last_switch = std::time::Instant::now();
-                    info!("Switched to LLM mode {}", index);
-                }
+        ShortcutAction::StartRecordingLlmMode(index) => {
+            if ensure_llm_mode_ready(app, *index, event_type == KeyEventType::Pressed).is_err() {
+                return;
             }
+            crate::llm::switch_active_mode_silent(app, *index);
+            let app_for_fn = app.clone();
+            handle_recording_event(
+                app,
+                RecordingSource::Llm,
+                mode,
+                event_type,
+                &shortcut_state,
+                move || crate::audio::record_audio(&app_for_fn, RecordingMode::Llm),
+            );
         }
         ShortcutAction::CancelRecording => {
             if event_type == KeyEventType::Pressed {
@@ -71,6 +111,17 @@ pub fn handle_shortcut_event(
                     drop(recording_source);
                     force_cancel_recording(app);
                 }
+            }
+        }
+        ShortcutAction::ToggleVoiceMode => {
+            if event_type == KeyEventType::Pressed {
+                let mut last_switch = recording_state().last_mode_switch.lock();
+                if last_switch.elapsed() <= Duration::from_millis(50) {
+                    return;
+                }
+                *last_switch = Instant::now();
+                drop(last_switch);
+                let _ = app.emit("voice-mode-toggle-requested", ());
             }
         }
     }
@@ -84,44 +135,77 @@ fn handle_recording_event<F>(
     shortcut_state: &ShortcutState,
     start_fn: F,
 ) where
-    F: FnOnce(),
+    F: FnOnce() + Send + 'static,
+{
+    match mode {
+        ActivationMode::PushToTalk => {
+            pushtotalk_recording_action(app, target, event_type, shortcut_state, start_fn)
+        }
+        ActivationMode::ToggleToTalk => {
+            if event_type == KeyEventType::Released {
+                toggle_recording_action(app, target, shortcut_state, start_fn);
+            }
+        }
+    }
+}
+
+fn pushtotalk_recording_action<F>(
+    app: &AppHandle,
+    target: RecordingSource,
+    event_type: KeyEventType,
+    _shortcut_state: &ShortcutState,
+    start_fn: F,
+) where
+    F: FnOnce() + Send + 'static,
 {
     let mut recording_source = recording_state().source.lock();
 
-    match mode {
-        ActivationMode::PushToTalk => match event_type {
-            KeyEventType::Pressed => {
-                if *recording_source == RecordingSource::None {
-                    start_recording(app, &mut recording_source, target, start_fn);
-                }
-            }
-            KeyEventType::Released => {
-                if *recording_source == target {
-                    stop_recording(app, &mut recording_source);
-                }
-            }
-        },
-        ActivationMode::ToggleToTalk => {
-            if event_type == KeyEventType::Released {
-                if *recording_source == target {
-                    shortcut_state.set_toggled(false);
-                    stop_recording(app, &mut recording_source);
-                    *recording_state().last_toggle_stop.lock() = std::time::Instant::now();
-                } else if *recording_source == RecordingSource::None {
-                    // Guard against X11 auto-repeat: after a stop, queued synthetic
-                    // Release events can arrive within milliseconds and would
-                    // immediately restart recording. 500ms cooldown prevents this.
-                    if recording_state().last_toggle_stop.lock().elapsed()
-                        < Duration::from_millis(250)
-                    {
-                        info!("ToggleToTalk start ignored (cooldown after stop)");
-                        return;
-                    }
-                    shortcut_state.set_toggled(true);
-                    start_recording(app, &mut recording_source, target, start_fn);
-                }
+    match event_type {
+        KeyEventType::Pressed => {
+            if *recording_source == RecordingSource::None {
+                start_recording(app, &mut recording_source, target, start_fn);
             }
         }
+        KeyEventType::Released => {
+            if *recording_source == target {
+                pre_stop(app, &mut recording_source);
+                drop(recording_source);
+                finish_stop(app);
+            }
+        }
+    }
+}
+
+pub(crate) fn toggle_recording_action<F>(
+    app: &AppHandle,
+    target: RecordingSource,
+    shortcut_state: &ShortcutState,
+    start_fn: F,
+) where
+    F: FnOnce() + Send + 'static,
+{
+    let mut recording_source = recording_state().source.lock();
+
+    if *recording_source == target {
+        // Cooldown after a recent start absorbs X11 auto-repeat:
+        // holding the key past ~500ms emits synthetic Release events
+        // that would otherwise toggle recording off immediately.
+        if within_cooldown(&recording_state().last_toggle_start) {
+            info!("ToggleToTalk stop ignored (cooldown after start)");
+            return;
+        }
+        shortcut_state.set_toggled(false);
+        pre_stop(app, &mut recording_source);
+        *recording_state().last_toggle_stop.lock() = Instant::now();
+        drop(recording_source);
+        finish_stop(app);
+    } else if *recording_source == RecordingSource::None {
+        if within_cooldown(&recording_state().last_toggle_stop) {
+            info!("ToggleToTalk start ignored (cooldown after stop)");
+            return;
+        }
+        shortcut_state.set_toggled(true);
+        start_recording(app, &mut recording_source, target, start_fn);
     }
 }
 
@@ -131,26 +215,36 @@ fn start_recording<F>(
     target: RecordingSource,
     start_fn: F,
 ) where
-    F: FnOnce(),
+    F: FnOnce() + Send + 'static,
 {
     crate::onboarding::onboarding::capture_focus_at_record_start(app);
-    start_fn();
     *recording_source = target;
-    info!("Started {:?} recording", target);
+    *recording_state().last_toggle_start.lock() = Instant::now();
+    // Run off-thread so the shortcut processor stays reactive during the
+    // ~100ms CPAL init and doesn't queue up auto-repeat events.
+    std::thread::spawn(move || {
+        start_fn();
+        info!("Started {:?} recording", target);
+    });
 }
 
-fn stop_recording(app: &AppHandle, recording_source: &mut RecordingSource) {
+fn pre_stop(app: &AppHandle, recording_source: &mut RecordingSource) {
     let audio_state = app.state::<crate::audio::types::AudioState>();
     if audio_state.is_limit_reached() {
-        // Reset toggle state when limit is reached (relevant for ToggleToTalk mode).
-        // We do NOT call force_stop_recording() here because recording_source
-        // is already locked by our caller — re-locking would deadlock.
         let shortcut_state = app.state::<ShortcutState>();
         shortcut_state.set_toggled(false);
     }
-    let _ = crate::audio::stop_recording(app);
     *recording_source = RecordingSource::None;
-    info!("Stopped recording");
+}
+
+fn finish_stop(app: &AppHandle) {
+    // Off-thread because stop_recording blocks on the LLM request and paste
+    // (~1s), during which the processor must keep handling keyboard events.
+    let app = app.clone();
+    std::thread::spawn(move || {
+        let _ = crate::audio::stop_recording(&app);
+        info!("Stopped recording");
+    });
 }
 
 pub fn force_stop_recording(app: &AppHandle) {
@@ -204,4 +298,36 @@ pub fn init_shortcuts(app: AppHandle) {
     app.manage(ShortcutRegistryState::new(registry));
 
     crate::shortcuts::platform_macos::init(app);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{within_cooldown, SHORTCUT_COOLDOWN};
+    use parking_lot::Mutex;
+    use std::time::{Duration, Instant};
+
+    #[test]
+    fn cooldown_active_for_recent_instant() {
+        let recent = Mutex::new(Instant::now());
+        assert!(within_cooldown(&recent));
+    }
+
+    #[test]
+    fn cooldown_inactive_past_threshold() {
+        let past = Mutex::new(Instant::now() - SHORTCUT_COOLDOWN - Duration::from_millis(50));
+        assert!(!within_cooldown(&past));
+    }
+
+    #[test]
+    fn cooldown_inactive_at_exact_threshold() {
+        let at_boundary = Mutex::new(Instant::now() - SHORTCUT_COOLDOWN);
+        assert!(!within_cooldown(&at_boundary));
+    }
+
+    #[test]
+    fn cooldown_threshold_matches_documented_value() {
+        // PTT/Toggle behaviour assumes 250 ms. Larger lets auto-repeat noise
+        // through, smaller drops legit very-short taps.
+        assert_eq!(SHORTCUT_COOLDOWN, Duration::from_millis(250));
+    }
 }
